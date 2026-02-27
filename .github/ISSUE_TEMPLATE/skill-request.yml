@@ -1,0 +1,37 @@
+name: Skill Request
+description: Propose a new skill for the library
+title: "[SKILL] "
+labels: ["enhancement", "new-skill"]
+body:
+  - type: input
+    id: skill_name
+    attributes:
+      label: Proposed skill name
+      placeholder: e.g., code-reviewer
+    validations:
+      required: true
+  - type: textarea
+    id: purpose
+    attributes:
+      label: What should this skill do?
+      placeholder: Describe the skill's purpose and when it should trigger
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example usage
+      placeholder: Give an example of how you'd use this skill
+    validations:
+      required: true
+  - type: checkboxes
+    id: agents
+    attributes:
+      label: Which agents do you need this for?
+      options:
+        - label: Claude Code
+        - label: OpenAI Codex
+        - label: AWS Kiro
+        - label: Google Gemini
+        - label: Cursor
+        - label: All
