@@ -8,6 +8,10 @@
 # - "copy" (default): copies normalized skills into ~/.polyagent-skills and ~/.openclaw/skills
 # - "link": symlinks ~/.polyagent-skills/{skills,common-skills} to this repo and still
 #   creates a normalized copy for OpenClaw under ~/.openclaw/skills (required by OpenClaw parser)
+#
+# WARNING: This script replaces global agent config files (~/.codex/AGENTS.md,
+# ~/.kiro/specs/polyagent-skills.md, ~/.gemini/instructions.md). Existing files
+# are backed up before replacement.
 
 set -euo pipefail
 
@@ -30,155 +34,21 @@ OPENCLAW_SKILLS_DIR="$OPENCLAW_HOME/skills"
 OPENCLAW_COMMON_DIR="$OPENCLAW_HOME/common-skills"
 
 BACKUP_DIR="$HOME/.polyagent-backup/$(date +%Y%m%d_%H%M%S)"
-BACKUP_CREATED="false"
 MANIFEST_FILE="$GLOBAL_ROOT/.global-install-manifest"
 MANAGED_TAG="install-global-all.sh"
-MANAGED_MARKER_KEY="polyagent-managed-by"
+
+# shellcheck source=lib-common.sh
+source "$SCRIPT_DIR/lib-common.sh"
 
 mkdir -p "$GLOBAL_ROOT" "$OPENCLAW_HOME" "$HOME/.codex" "$HOME/.kiro/specs" "$HOME/.gemini"
 mkdir -p "$(dirname "$MANIFEST_FILE")"
 printf "# polyagent global install manifest\n# format: <path>\\t<kind>\\t<tag>\n" > "$MANIFEST_FILE"
 
-record_manifest() {
-    local path="$1"
-    local kind="$2"
-    printf "%s\t%s\t%s\n" "$path" "$kind" "$MANAGED_TAG" >> "$MANIFEST_FILE"
-}
-
-mark_dir_managed() {
-    local dir="$1"
-    cat > "$dir/.polyagent-managed" <<EOF
-$MANAGED_MARKER_KEY: $MANAGED_TAG
-source-repo: $REPO_DIR
-EOF
-}
-
-backup_if_exists() {
-    local path="$1"
-    local safe_name target
-    if [ -e "$path" ] || [ -L "$path" ]; then
-        if [ "$BACKUP_CREATED" = "false" ]; then
-            mkdir -p "$BACKUP_DIR"
-            BACKUP_CREATED="true"
-        fi
-        safe_name="${path#/}"
-        safe_name="${safe_name//\//__}"
-        target="$BACKUP_DIR/$safe_name"
-        mv "$path" "$target"
-        echo "  Backed up: $path -> $target"
-    fi
-}
-
-extract_skill_name() {
-    local src="$1"
-    sed -n 's/^name:[[:space:]]*//p' "$src" | head -n 1
-}
-
-extract_skill_description() {
-    local src="$1"
-    awk '
-BEGIN{fm=0;seen=0;block=0;desc=""}
-/^---$/{
-  if(!seen){seen=1;fm=1;next}
-  if(fm){fm=0;exit}
-}
-fm{
-  if($0 ~ /^description:[[:space:]]*>/){block=1;next}
-  if(block){
-    if($0 ~ /^[A-Za-z0-9_-]+:[[:space:]]*/){block=0}
-    else{
-      line=$0
-      sub(/^[[:space:]]+/, "", line)
-      if(line!="") desc=desc line " "
-      next
-    }
-  }
-  if($0 ~ /^description:[[:space:]]*/){
-    line=$0
-    sub(/^description:[[:space:]]*/, "", line)
-    desc=line
-  }
-}
-END{
-  gsub(/[[:space:]]+$/, "", desc)
-  print desc
-}' "$src"
-}
-
-extract_skill_body() {
-    local src="$1"
-    awk '
-BEGIN{fm=0;seen=0}
-NR==1 && $0=="---"{seen=1;fm=1;next}
-fm && $0=="---"{fm=0;next}
-!fm{print}
-' "$src"
-}
-
-normalize_skill_markdown() {
-    local src="$1"
-    local dst="$2"
-    local fallback_name="$3"
-    local name description body esc_description
-
-    name="$(extract_skill_name "$src")"
-    if [ -z "$name" ]; then
-        name="$fallback_name"
-    fi
-
-    description="$(extract_skill_description "$src")"
-    if [ -z "$description" ]; then
-        description="Portable polyagent skill: $name"
-    fi
-
-    body="$(extract_skill_body "$src")"
-    esc_description="${description//\\/\\\\}"
-    esc_description="${esc_description//\"/\\\"}"
-
-    {
-        echo "---"
-        echo "name: $name"
-        echo "description: \"$esc_description\""
-        echo "---"
-        echo ""
-        printf "%s\n" "$body"
-    } > "$dst"
-}
-
-install_normalized_skills_copy() {
-    local source_skills="$1"
-    local source_common="$2"
-    local target_skills="$3"
-    local target_common="$4"
-    local skill_name src_dir dst_dir
-
-    backup_if_exists "$target_skills"
-    mkdir -p "$target_skills"
-    mark_dir_managed "$target_skills"
-    record_manifest "$target_skills" "dir"
-
-    for src_dir in "$source_skills"/*; do
-        [ -d "$src_dir" ] || continue
-        skill_name="$(basename "$src_dir")"
-        dst_dir="$target_skills/$skill_name"
-        mkdir -p "$dst_dir"
-        cp -a "$src_dir/." "$dst_dir/"
-        if [ -f "$src_dir/SKILL.md" ]; then
-            normalize_skill_markdown "$src_dir/SKILL.md" "$dst_dir/SKILL.md" "$skill_name"
-        fi
-        echo "  Installed skill: $skill_name -> $target_skills"
-    done
-
-    backup_if_exists "$target_common"
-    mkdir -p "$target_common"
-    cp -a "$source_common/." "$target_common/"
-    mark_dir_managed "$target_common"
-    record_manifest "$target_common" "dir"
-    echo "  Installed common skills -> $target_common"
-}
-
 write_codex_global_instructions() {
     local path="$HOME/.codex/AGENTS.md"
+    if [ -e "$path" ]; then
+        echo "  Note: Existing $path will be backed up and replaced."
+    fi
     backup_if_exists "$path"
     cat > "$path" <<EOF
 <!-- $MANAGED_MARKER_KEY: $MANAGED_TAG -->
@@ -201,6 +71,9 @@ EOF
 
 write_kiro_global_instructions() {
     local path="$HOME/.kiro/specs/polyagent-skills.md"
+    if [ -e "$path" ]; then
+        echo "  Note: Existing $path will be backed up and replaced."
+    fi
     backup_if_exists "$path"
     cat > "$path" <<EOF
 <!-- $MANAGED_MARKER_KEY: $MANAGED_TAG -->
@@ -226,6 +99,9 @@ EOF
 
 write_gemini_global_instructions() {
     local path="$HOME/.gemini/instructions.md"
+    if [ -e "$path" ]; then
+        echo "  Note: Existing $path will be backed up and replaced."
+    fi
     backup_if_exists "$path"
     cat > "$path" <<EOF
 <!-- $MANAGED_MARKER_KEY: $MANAGED_TAG -->
@@ -265,11 +141,12 @@ else
 fi
 
 echo ""
-echo "Installing OpenClaw global skills (normalized copy required)..."
+echo "Installing OpenClaw global skills (normalized copy — required by OpenClaw parser)..."
 install_normalized_skills_copy "$REPO_DIR/skills" "$REPO_DIR/common-skills" "$OPENCLAW_SKILLS_DIR" "$OPENCLAW_COMMON_DIR"
 
 echo ""
 echo "Writing global agent configs..."
+echo "  (Existing config files will be backed up before replacement.)"
 write_codex_global_instructions
 write_kiro_global_instructions
 write_gemini_global_instructions
@@ -281,7 +158,7 @@ echo "Per-project installer is unchanged: ./scripts/install-to-project.sh"
 echo "Uninstall safely with: ./scripts/uninstall-global-all.sh --dry-run"
 echo ""
 echo "Verify:"
-echo "  openclaw skills list | rg -i 'requirement-study|repo-bootstrap|remote-ops'"
+echo "  openclaw skills list | grep -i 'requirement-study\|repo-bootstrap\|remote-ops'"
 echo "  openclaw skills check"
 echo ""
 echo "If OpenClaw gateway is running, restart it to reload skills."

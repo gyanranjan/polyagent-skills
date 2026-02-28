@@ -16,14 +16,14 @@ Every AI coding agent has its own way of consuming instructions — `CLAUDE.md`,
 
 ```
 ┌──────────────────────────────────────────────────┐
-│  Layer 3: Adapters        (thin, per-agent)      │
-│  CLAUDE.md / AGENTS.md / .kiro/ / .gemini/       │
+│  Layer 3: Adapters        (thin, per-agent)       │
+│  CLAUDE.md / AGENTS.md / .kiro/ / .gemini/        │
 ├──────────────────────────────────────────────────┤
-│  Layer 2: Skill Library   (portable, markdown)   │
-│  skills/requirement-study/  skills/deck-creator/ │
+│  Layer 2: Skill Library   (portable, markdown)    │
+│  skills/requirement-study/  skills/deck-creator/  │
 ├──────────────────────────────────────────────────┤
-│  Layer 1: Common Foundation (shared patterns)    │
-│  common-skills/  templates/  conventions         │
+│  Layer 1: Common Foundation (shared patterns)     │
+│  common-skills/  templates/  conventions          │
 └──────────────────────────────────────────────────┘
 ```
 
