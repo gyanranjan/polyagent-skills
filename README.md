@@ -1,6 +1,6 @@
 # polyagent-skills
 
-**Write AI agent skills once, use everywhere — portable skill library for Claude Code, Kiro, Codex, Gemini, Cursor & more.**
+**Write AI agent skills once, use everywhere — portable skill library for Claude Code, Kiro, Codex, Gemini, OpenClaw, Cursor & more.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -35,6 +35,7 @@ Every AI coding agent has its own way of consuming instructions — `CLAUDE.md`,
 | OpenAI Codex | `AGENTS.md` | ✅ Supported |
 | AWS Kiro | `.kiro/specs/` | ✅ Supported |
 | Google Gemini | `.gemini/instructions.md` | ✅ Supported |
+| OpenClaw | `~/.openclaw/skills/` | ✅ Supported |
 | Cursor | `.cursor/rules.md` | ✅ Supported |
 | Windsurf | `.windsurfrules` | 🟡 Planned |
 
@@ -45,14 +46,61 @@ Every AI coding agent has its own way of consuming instructions — `CLAUDE.md`,
 git clone https://github.com/gyanranjan/polyagent-skills.git
 cd polyagent-skills
 
-# Install skills + adapters into your project
+# One-time global install (Codex + Kiro + Gemini + OpenClaw)
+./scripts/install-global-all.sh copy
+
+# Project install (kept for per-repo adapters)
 ./scripts/install-to-project.sh /path/to/my-project all
 
 # Or install for a specific agent only
 ./scripts/install-to-project.sh /path/to/my-project claude-code
 ```
 
-Now open your project in any supported agent — it finds its adapter and your full skill library is available.
+Use global install when you want "set once, reuse everywhere." Use project install when you want repo-local agent config files.
+
+## Install Modes
+
+### Global (one-time)
+
+```bash
+./scripts/install-global-all.sh copy
+```
+
+This installs:
+
+- Shared global library: `~/.polyagent-skills/skills` and `~/.polyagent-skills/common-skills`
+- Global Codex instructions: `~/.codex/AGENTS.md`
+- Global Kiro instructions: `~/.kiro/specs/polyagent-skills.md`
+- Global Gemini instructions: `~/.gemini/instructions.md`
+- OpenClaw managed skills: `~/.openclaw/skills` and `~/.openclaw/common-skills`
+
+Optional dev mode:
+
+```bash
+./scripts/install-global-all.sh link
+```
+
+`link` symlinks the shared library for live edits; OpenClaw still receives normalized copied skills for parser compatibility.
+
+### Uninstall global setup (safe)
+
+```bash
+# Preview what would be removed
+./scripts/uninstall-global-all.sh --dry-run
+
+# Remove only installer-managed paths
+./scripts/uninstall-global-all.sh
+```
+
+Uninstall removes only paths recorded in installer manifest files and only when ownership markers match.
+
+### Per-project (existing behavior)
+
+```bash
+./scripts/install-to-project.sh /path/to/my-project all
+```
+
+This copies adapters plus `skills/` and `common-skills/` into that specific project.
 
 ## Available Skills
 
@@ -118,6 +166,9 @@ polyagent-skills/
 ├── mcp-servers/               # MCP servers for tool-based skills
 │
 ├── scripts/                   # Automation
+│   ├── install-global-all.sh
+│   ├── install-openclaw-global.sh
+│   ├── uninstall-global-all.sh
 │   ├── install-to-project.sh
 │   ├── sync-adapters.sh
 │   └── pull-skill.sh

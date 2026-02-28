@@ -78,6 +78,20 @@ Tracking known limitations, agent quirks, and workarounds.
 
 ---
 
+## KI-007: OpenClaw SKILL.md parser expects simplified frontmatter
+
+**Status:** Open
+**Severity:** Medium
+**Agents affected:** OpenClaw
+
+**Problem:** Some portable `SKILL.md` files use multi-line YAML frontmatter (for example `description: >`). OpenClaw skill loading expects single-line frontmatter keys and may skip or misread such skills.
+
+**Workaround:** Use `scripts/install-global-all.sh` or `scripts/install-openclaw-global.sh` in `copy` mode. These normalize frontmatter when installing into `~/.openclaw/skills`.
+
+**Tracking:** Re-test with each OpenClaw update to determine if normalization can be removed.
+
+---
+
 ## Adding a New Known Issue
 
 Use this format:

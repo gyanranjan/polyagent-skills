@@ -79,6 +79,8 @@ Every adapter includes an `install.sh` that:
 4. Checks for existing instruction files and backs them up
 5. Is idempotent — safe to run multiple times
 
+Note: this contract is for **project-local adapter installs**. Global machine-level setup scripts (for example, `scripts/install-global-all.sh`) are complementary and do not replace adapter-level project install behavior.
+
 ### Auto-Generation
 
 `scripts/sync-adapters.sh` regenerates the skill list section of each adapter by scanning `skills/*/SKILL.md` frontmatter. Manual edits to the skill list section will be overwritten.
