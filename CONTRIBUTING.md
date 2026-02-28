@@ -19,6 +19,16 @@
 4. Write an [ADR](docs/adrs/ADR_TEMPLATE.md) if the agent requires special handling
 5. Submit a PR
 
+### Updating Install Flows
+
+If your change affects installation behavior, update all relevant scripts and docs together:
+
+1. Project installer: `scripts/install-to-project.sh`
+2. Global installer: `scripts/install-global-all.sh`
+3. OpenClaw global installer (if relevant): `scripts/install-openclaw-global.sh`
+4. Uninstaller: `scripts/uninstall-global-all.sh`
+5. Documentation references in `README.md` and `KNOWN_ISSUES.md`
+
 ### Proposing a Significant Change
 
 1. Write an [RFC](docs/rfcs/RFC_TEMPLATE.md)
