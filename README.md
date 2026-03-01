@@ -58,6 +58,26 @@ cd polyagent-skills
 
 Use global install when you want "set once, reuse everywhere." Use project install when you want repo-local agent config files.
 
+## Spec-Driven Delivery Flow
+
+```mermaid
+flowchart LR
+  A[English Notes] --> B[Requirement Study]
+  B --> C{Design Readiness Gate}
+  C -->|Pass/Deferred| D[Implementation Sketch]
+  C -->|Open Items| T[agent.todo.md Blocked + Decision Needed]
+  D --> E[Repo Bootstrap]
+  E --> F[Code + Tests]
+  F --> G[GitHub Issues/PRs]
+  F --> H[RCA if incidents/defects]
+  H --> B
+```
+
+Key controls before coding:
+- Requirements traced as `REQ-*` / `NFR-*`
+- Architecture pattern, language/runtime, DB strategy, and logging baseline decided
+- Open design items explicitly blocked in `agent.todo.md`
+
 ## Install Modes
 
 ### Global (one-time)
@@ -124,6 +144,7 @@ polyagent-skills/
 ├── LICENSE
 ├── CONTRIBUTING.md
 ├── KNOWN_ISSUES.md
+├── agent.todo.md             # Canonical cross-session, multi-agent TODO ledger
 │
 ├── docs/
 │   ├── specs/                 # Spec-driven development
@@ -135,12 +156,17 @@ polyagent-skills/
 │   │   ├── 001-markdown-as-skill-format.md
 │   │   ├── 002-three-layer-architecture.md
 │   │   ├── 003-adapter-pattern.md
-│   │   └── 004-mcp-for-tool-skills.md
+│   │   ├── 004-mcp-for-tool-skills.md
+│   │   └── 005-workflow-orchestration-and-session-todo.md
+│   ├── rca/                   # Root Cause Analysis templates and docs
+│   │   └── RCA_TEMPLATE.md
 │   └── rfcs/                  # Proposals for significant changes
 │       └── RFC_TEMPLATE.md
 │
 ├── common-skills/             # Shared building blocks
 │   ├── README.md
+│   ├── agent-todo-ledger.md
+│   ├── design-readiness-gate.md
 │   ├── document-tail-sections.md
 │   ├── output-formatting.md
 │   └── quality-checklist.md
@@ -170,6 +196,10 @@ polyagent-skills/
 │   ├── install-openclaw-global.sh
 │   ├── uninstall-global-all.sh
 │   ├── install-to-project.sh
+│   ├── check-mermaid.sh
+│   ├── design-readiness-check.sh
+│   ├── init-requirement-issues.sh
+│   ├── sync-agent-todo.sh
 │   ├── sync-adapters.sh
 │   └── pull-skill.sh
 │
@@ -194,8 +224,28 @@ polyagent-skills/
 - [Skill Format Spec](docs/specs/skill-format-spec.md) — How to write a portable skill
 - [Adapter Contract Spec](docs/specs/adapter-contract-spec.md) — How adapters work
 - [Architecture Decision Records](docs/adrs/) — Why we made the choices we did
+- [RCA Template](docs/rca/RCA_TEMPLATE.md) — Root cause analysis format for incidents/defects
 - [Known Issues](KNOWN_ISSUES.md) — Current limitations and workarounds
 - [Contributing Guide](CONTRIBUTING.md) — How to add skills and adapters
+
+## Workflow Automation Scripts
+
+```bash
+# Mermaid tooling check (non-blocking)
+./scripts/check-mermaid.sh
+
+# Validate design readiness sections (strict: fails on Open)
+./scripts/design-readiness-check.sh path/to/requirements.md path/to/spec.md
+
+# Structure-only validation (allows Open)
+./scripts/design-readiness-check.sh --allow-open path/to/spec.md
+
+# Sync requirement/spec traceability into agent.todo.md
+./scripts/sync-agent-todo.sh agent.todo.md path/to/requirements.md path/to/spec.md
+
+# Create GitHub issue stubs from REQ IDs
+./scripts/init-requirement-issues.sh path/to/requirements.md org/repo
+```
 
 ## License
 

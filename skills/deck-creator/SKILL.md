@@ -6,8 +6,8 @@ description: >
   to present information visually. Supports pitch decks, status updates, technical
   overviews, and training materials.
 tags: [presentation, slides, deck, powerpoint, pitch]
-version: "1.0"
-common-skills-used: [output-formatting]
+version: "1.0.0"
+common-skills-used: [output-formatting, quality-checklist]
 agents-tested: [claude-code, kiro]
 ---
 
@@ -64,6 +64,20 @@ Output as structured Markdown or generate a `.pptx` file if the agent supports i
 
 Markdown slide outline or `.pptx` file. Filename: `deck-<topic>.md` or `deck-<topic>.pptx`
 
+## Quality Checks
+
+- [ ] Slide sequence tells a coherent story with one core idea per slide
+- [ ] Claims, metrics, and dates are consistent across slides and notes
+- [ ] Each slide includes a clear presenter intent in speaker notes
+- [ ] Language density is presentation-friendly (scannable, not paragraph-heavy)
+
 ## Common Skills Used
 
 - `common-skills/output-formatting.md` — Consistent formatting
+- `common-skills/quality-checklist.md` — Final quality gate before delivery
+
+## Edge Cases
+
+- **Strict slide-count limit:** Prioritize key narrative and move details to appendix slides
+- **Mixed audience (exec + technical):** Use layered slides with headline takeaway first
+- **No source content provided:** Start with discovery questions before drafting the deck

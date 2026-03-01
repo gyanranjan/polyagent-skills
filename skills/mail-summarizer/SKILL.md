@@ -6,8 +6,8 @@ description: >
   draft a reply, or manage email communication. Triggers on "summarize this email",
   "what does this email say", "draft a reply", "extract action items from mail".
 tags: [email, summary, reply, action-items, communication]
-version: "1.0"
-common-skills-used: [output-formatting]
+version: "1.0.0"
+common-skills-used: [output-formatting, quality-checklist]
 agents-tested: [claude-code]
 ---
 
@@ -91,6 +91,13 @@ If the user wants a reply:
 
 Structured summary in Markdown (inline, not a separate file unless the thread is very long). Reply drafts in plain text suitable for email.
 
+## Quality Checks
+
+- [ ] TL;DR and action items align with the actual thread content
+- [ ] Owners, deadlines, and unresolved questions are captured explicitly
+- [ ] Reply draft tone matches requested/observed formality
+- [ ] Any missing context is called out instead of guessed
+
 ## Edge Cases
 
 - **Very long threads:** Summarize the most recent 3-5 emails in detail, and provide a one-line summary of older context
@@ -100,3 +107,4 @@ Structured summary in Markdown (inline, not a separate file unless the thread is
 ## Common Skills Used
 
 - `common-skills/output-formatting.md` — Consistent formatting
+- `common-skills/quality-checklist.md` — Final review before delivery

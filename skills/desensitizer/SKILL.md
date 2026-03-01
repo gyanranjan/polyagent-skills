@@ -6,7 +6,7 @@ description: >
   info", "desensitize a document", or needs to prepare data for sharing, demos,
   or testing without exposing real information.
 tags: [privacy, anonymization, pii, masking, data-protection]
-version: "1.0"
+version: "1.0.0"
 common-skills-used: [quality-checklist]
 agents-tested: [claude-code, kiro]
 ---
@@ -23,6 +23,11 @@ Remove or mask sensitive information from any content while preserving its struc
 - User wants to create anonymized versions of real data
 - User needs to prepare content for external sharing
 - User asks to mask credentials, API keys, or secrets in configs/code
+
+## When NOT to Use
+
+- User asks for legal/privacy policy interpretation without providing masking work
+- User requests irreversible deletion from live systems (this skill handles content transformation)
 
 ## Inputs
 
@@ -52,6 +57,19 @@ Review the output to ensure no sensitive data leaked through and the document re
 
 Desensitized version of the input in the same format.
 
+## Quality Checks
+
+- [ ] All obvious direct identifiers (names, emails, phone numbers, IDs) are handled
+- [ ] Secret patterns (keys/tokens/passwords) are masked consistently
+- [ ] Replacement strategy preserves structure needed for downstream use
+- [ ] Same source entity maps to the same replacement value throughout
+
 ## Common Skills Used
 
 - `common-skills/quality-checklist.md` — Verify completeness of desensitization
+
+## Edge Cases
+
+- **Partially structured data:** Preserve delimiters/schema while masking cell values
+- **High re-identification risk context:** Prefer `[REDACTED]` over realistic fake replacements
+- **Binary or encoded payloads:** Flag unsupported formats and request decoded text form first

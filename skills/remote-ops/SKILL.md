@@ -6,7 +6,7 @@ description: >
   setup, CI/CD pipelines, monitoring, or any remote operations task. Triggers on
   "deploy", "server", "infrastructure", "ops", "pipeline", "monitoring".
 tags: [devops, deployment, infrastructure, operations, server, ci-cd]
-version: "1.0"
+version: "1.0.0"
 common-skills-used: [output-formatting, quality-checklist]
 agents-tested: [claude-code]
 ---
@@ -24,6 +24,11 @@ Guide and execute remote operations tasks — deployments, infrastructure manage
 - User wants CI/CD pipeline configuration
 - User needs monitoring or alerting setup
 - User asks about server administration tasks
+
+## When NOT to Use
+
+- User asks for application feature development unrelated to operations
+- User requests risky production changes without rollback or validation criteria
 
 ## Inputs
 
@@ -57,7 +62,20 @@ Record what was done, any issues encountered, and lessons learned.
 
 Runbook in Markdown or direct execution with logged output. Filename: `runbook-<operation>.md`
 
+## Quality Checks
+
+- [ ] Pre-checks, execution steps, validation, and rollback are all defined
+- [ ] Commands are environment-specific and include safe defaults
+- [ ] Success/failure criteria are observable (health checks, metrics, logs)
+- [ ] Any destructive action is explicitly called out before execution
+
 ## Common Skills Used
 
 - `common-skills/output-formatting.md` — For runbooks and documentation
 - `common-skills/quality-checklist.md` — Validate the operation plan
+
+## Edge Cases
+
+- **Limited access/no shell:** Provide non-invasive diagnostic commands and escalation path
+- **Production incident context:** Prioritize stabilization and evidence capture before optimization
+- **Unknown environment drift:** Add verification steps before and after each change block
