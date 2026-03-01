@@ -7,8 +7,8 @@ description: >
   validate completeness of existing requirements. Also triggers on phrases like
   "what do we need to build", "write me a spec", or "break this down into requirements".
 tags: [requirements, prd, analysis, specification, product]
-version: "1.0"
-common-skills-used: [document-tail-sections, output-formatting, quality-checklist]
+version: "1.0.0"
+common-skills-used: [agent-todo-ledger, design-readiness-gate, document-tail-sections, output-formatting, quality-checklist]
 agents-tested: [claude-code, kiro]
 ---
 
@@ -46,7 +46,21 @@ Transform any input (rough notes, conversation transcripts, feature requests, ex
 
 ## Process
 
-### Step 1: Understand the Domain
+### Step 1: Preflight Tooling Check
+
+Run a non-blocking Mermaid check for future diagram generation:
+
+```bash
+if command -v mmdc >/dev/null 2>&1; then
+  mmdc --version
+else
+  echo "mmdc not installed; continue with text/Markdown diagrams and add TODO entry"
+fi
+```
+
+If `mmdc` is missing, add a task to `agent.todo.md` under `Next` or `Blocked`.
+
+### Step 2: Understand the Domain
 
 Read the source material completely. Identify:
 - The domain/industry context
@@ -56,14 +70,14 @@ Read the source material completely. Identify:
 
 Summarize your understanding in 3-5 sentences and confirm with the user before proceeding.
 
-### Step 2: Extract Raw Requirements
+### Step 3: Extract Raw Requirements
 
 Go through the source material and extract every explicit and implicit requirement. For each, note:
 - The original text/context it came from
 - Whether it was explicitly stated or inferred
 - Initial categorization (functional, non-functional, constraint)
 
-### Step 3: Categorize and Structure
+### Step 4: Categorize and Structure
 
 Organize requirements into:
 
@@ -73,7 +87,7 @@ Organize requirements into:
 4. **Assumptions** — Things assumed to be true
 5. **Out of Scope** — Explicitly excluded items
 
-### Step 4: Write Formal Requirements
+### Step 5: Write Formal Requirements
 
 For each requirement, write in this format:
 
@@ -90,7 +104,7 @@ For each requirement, write in this format:
 **Source:** Where this came from in the input
 ```
 
-### Step 5: Identify Gaps and Ambiguities
+### Step 6: Identify Gaps and Ambiguities
 
 Review the full requirement set and flag:
 - Missing requirements implied but not stated
@@ -98,7 +112,7 @@ Review the full requirement set and flag:
 - Conflicting requirements
 - Requirements that may be technically infeasible (flag for discussion)
 
-### Step 6: Produce the Requirements Document
+### Step 7: Produce the Requirements Document
 
 Assemble into a document following `common-skills/output-formatting.md`:
 
@@ -114,7 +128,26 @@ Assemble into a document following `common-skills/output-formatting.md`:
 10. Gaps and Open Questions
 11. Tail sections per `common-skills/document-tail-sections.md`
 
-### Step 7: Quality Check
+### Step 8: Build Design Readiness Handoff (Pre-Coding)
+
+Prepare a pre-coding handoff using `common-skills/design-readiness-gate.md`:
+
+- Record known decisions and unresolved items for architecture pattern, language/runtime, database strategy, and logging/observability baseline.
+- Mark unresolved items as `Deferred` with owner and due date.
+- Add a blocking task in `agent.todo.md` if any required gate item is open.
+
+### Step 9: Update Cross-Session Ledger and GitHub Mapping
+
+Update `agent.todo.md` using `common-skills/agent-todo-ledger.md`:
+
+- Add current requirement tasks in `Now`/`Next`
+- Add unresolved questions to `Decision Needed`
+- Add file ownership/locks for active requirement artifacts
+- Add requirement-to-issue links in `GitHub Mapping` (if GitHub IDs are available)
+
+If GitHub integration is available, create issue stubs for `REQ-*` and reflect IDs in both the requirements doc and `agent.todo.md`.
+
+### Step 10: Quality Check
 
 Apply `common-skills/quality-checklist.md` before delivering.
 
@@ -126,7 +159,15 @@ Additional requirement-specific checks:
 
 ## Output Format
 
-A Markdown document (`.md`) following the structure in Step 6. Filename: `requirement-study-<topic>.md`
+A Markdown document (`.md`) following the structure in Step 7. Filename: `requirement-study-<topic>.md`
+
+## Quality Checks
+
+- [ ] Every requirement has ID, priority, rationale, and acceptance criteria
+- [ ] Non-functional requirements are measurable and testable
+- [ ] Assumptions, constraints, and out-of-scope are explicit and non-overlapping
+- [ ] Open questions are surfaced without silently resolving ambiguity
+- [ ] Pre-coding design readiness handoff exists or unresolved items are explicitly blocked in `agent.todo.md`
 
 ## Edge Cases
 
@@ -136,6 +177,8 @@ A Markdown document (`.md`) following the structure in Step 6. Filename: `requir
 
 ## Common Skills Used
 
+- `common-skills/agent-todo-ledger.md` — Maintain user-visible cross-session task state
+- `common-skills/design-readiness-gate.md` — Define pre-coding architecture and operational decision gate
 - `common-skills/document-tail-sections.md` — Standard document endings
 - `common-skills/output-formatting.md` — Consistent formatting
 - `common-skills/quality-checklist.md` — Pre-delivery quality gate

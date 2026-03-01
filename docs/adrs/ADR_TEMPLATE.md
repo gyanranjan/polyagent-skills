@@ -3,6 +3,7 @@
 **Status:** Proposed | Accepted | Deprecated | Superseded
 **Date:** YYYY-MM-DD
 **Deciders:** [names]
+**Canonical TODO Ledger:** `agent.todo.md`
 
 ## Context
 
@@ -36,3 +37,5 @@ Description and why it was rejected.
 ## Related
 
 - Links to specs, other ADRs, issues
+- Related GitHub issues/PRs
+- Related RCA documents (if any)

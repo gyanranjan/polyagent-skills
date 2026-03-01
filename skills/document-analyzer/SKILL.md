@@ -6,7 +6,7 @@ description: >
   this document", "analyze this report", "what does this document say", "extract
   key points", "summarize this PDF", or needs to quickly grasp unfamiliar material.
 tags: [document, analysis, summary, extraction, understanding]
-version: "1.0"
+version: "1.0.0"
 common-skills-used: [document-tail-sections, output-formatting, quality-checklist]
 agents-tested: [claude-code]
 ---
@@ -127,8 +127,21 @@ Apply `common-skills/quality-checklist.md` plus:
 
 Markdown analysis, inline for short documents, as a file (`analysis-<doc-name>.md`) for long ones.
 
+## Quality Checks
+
+- [ ] Summary is materially shorter than source while preserving key facts
+- [ ] Important points are prioritized by impact, not source order
+- [ ] Uncertainty, missing context, and assumptions are explicitly labeled
+- [ ] Quotes and references (if used) are accurate and minimal
+
 ## Common Skills Used
 
 - `common-skills/output-formatting.md` — Consistent formatting
 - `common-skills/quality-checklist.md` — Pre-delivery quality gate
 - `common-skills/document-tail-sections.md` — If producing a formal analysis document
+
+## Edge Cases
+
+- **Scanned/OCR-poor documents:** Flag extraction uncertainty and avoid overconfident claims
+- **Conflicting sections in a document:** Call out contradictions with section pointers
+- **Outdated or time-sensitive sources:** Note currency risks and recommend verification
