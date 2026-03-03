@@ -58,12 +58,40 @@ You have access to a portable skill library in:
 - \`$GLOBAL_SKILLS_DIR\`
 - \`$GLOBAL_COMMON_DIR\`
 
+## Development Lifecycle Gates (Mandatory)
+
+Before writing production code, follow \`$GLOBAL_COMMON_DIR/development-lifecycle-gates.md\`.
+
+G0 Discovery -> G1 Requirements -> G2 Design -> G3 POC/Spike (if needed) -> G4 Implementation -> G5 Review -> G6 Ship.
+
+Gates are mandatory by default. Check \`agent.todo.md\` for gate status. Start at the earliest incomplete gate. Skip only if the user explicitly asks.
+
+## Operating Expectations (Mandatory)
+
+1. Act as an expert partner: challenge weak assumptions and propose stronger options.
+2. Ask 2-4 high-value, decision-oriented questions at each gate transition.
+3. In every substantive response, include:
+   - \`Stage: Gx <name>\`
+   - \`Next: <immediate next step>\`
+4. Requirements/design deliverables must include in-block Mermaid diagrams by default.
+5. Generate shareable PDF exports for requirements/design docs by default unless the user opts out.
+6. Keep \`agent.todo.md\` workflow snapshot and gate evidence updated continuously.
+
 When you receive a task:
 1. Check \`$GLOBAL_SKILLS_DIR\` for a matching skill by reading each SKILL.md description.
 2. Read the full SKILL.md for the matched skill.
 3. Follow its Process steps in order.
 4. Apply referenced common-skills from \`$GLOBAL_COMMON_DIR\`.
 5. Deliver in the specified Output Format.
+
+## Pre-PR Quality Gate (Required)
+
+Before opening or merging any PR, run:
+
+\`\`\`bash
+./scripts/gate-status-check.sh agent.todo.md
+./scripts/design-readiness-check.sh --allow-open skills/requirement-study/references/requirement-template.md docs/specs/SPEC_TEMPLATE.md
+\`\`\`
 EOF
     record_manifest "$path" "file"
     echo "  Wrote Codex global config: $path"
@@ -79,19 +107,42 @@ write_kiro_global_instructions() {
 <!-- $MANAGED_MARKER_KEY: $MANAGED_TAG -->
 # Skill Library Integration - polyagent-skills (global)
 
-When working on tasks, check this global skills directory for a matching skill:
+You have access to a portable skill library:
 - \`$GLOBAL_SKILLS_DIR\`
-
-Each skill has a \`SKILL.md\` with step-by-step instructions to follow.
-Shared conventions are in:
 - \`$GLOBAL_COMMON_DIR\`
 
-Usage:
-1. Match the user's task to a skill.
-2. Read the skill's SKILL.md fully.
-3. Follow the Process steps.
-4. Apply common-skills when referenced.
-5. Deliver in the specified format.
+## Development Lifecycle Gates (Mandatory)
+
+Before writing production code, follow \`$GLOBAL_COMMON_DIR/development-lifecycle-gates.md\`.
+Check \`agent.todo.md\` for gate status. Start at the earliest incomplete gate. Skip only if the user explicitly asks.
+
+## Operating Expectations (Mandatory)
+
+1. Behave as an expert partner and challenge weak assumptions.
+2. Ask 2-4 high-value, decision-oriented questions at each gate transition.
+3. In every substantive response, include:
+   - \`Stage: Gx <name>\`
+   - \`Next: <immediate next step>\`
+4. Requirements/design deliverables include in-block Mermaid diagrams by default.
+5. Generate shareable PDF exports for requirements/design docs by default unless user opts out.
+6. Keep \`agent.todo.md\` workflow snapshot and gate evidence updated.
+
+## Task Workflow
+
+1. Match the task to a skill in \`$GLOBAL_SKILLS_DIR\`.
+2. Read the full matched \`SKILL.md\`.
+3. Follow its Process steps in order.
+4. Apply referenced common-skills from \`$GLOBAL_COMMON_DIR\`.
+5. Deliver in the specified output format.
+
+## Pre-PR Quality Gate (Required)
+
+Before opening or merging any PR, run:
+
+\`\`\`bash
+./scripts/gate-status-check.sh agent.todo.md
+./scripts/design-readiness-check.sh --allow-open skills/requirement-study/references/requirement-template.md docs/specs/SPEC_TEMPLATE.md
+\`\`\`
 EOF
     record_manifest "$path" "file"
     echo "  Wrote Kiro global config: $path"
@@ -107,13 +158,42 @@ write_gemini_global_instructions() {
 <!-- $MANAGED_MARKER_KEY: $MANAGED_TAG -->
 # Agent Instructions - polyagent-skills (global)
 
-You have access to a global portable skill library:
+You have access to a portable skill library:
 - \`$GLOBAL_SKILLS_DIR\`
 - \`$GLOBAL_COMMON_DIR\`
 
-For any task, first check \`$GLOBAL_SKILLS_DIR\` for a matching skill.
-Read its SKILL.md and follow the instructions.
-Apply common-skills when referenced from \`$GLOBAL_COMMON_DIR\`.
+## Development Lifecycle Gates (Mandatory)
+
+Before writing production code, follow \`$GLOBAL_COMMON_DIR/development-lifecycle-gates.md\`.
+Check \`agent.todo.md\` for gate status. Start at the earliest incomplete gate. Skip only if the user explicitly asks.
+
+## Operating Expectations (Mandatory)
+
+1. Act as an expert partner and challenge weak assumptions.
+2. Ask 2-4 high-value, decision-oriented questions at each gate transition.
+3. In every substantive response, include:
+   - \`Stage: Gx <name>\`
+   - \`Next: <immediate next step>\`
+4. Requirements/design deliverables should include in-block Mermaid diagrams by default.
+5. Generate shareable PDF exports for requirements/design docs by default unless user opts out.
+6. Keep \`agent.todo.md\` workflow snapshot and gate evidence up to date.
+
+## Task Workflow
+
+1. Check \`$GLOBAL_SKILLS_DIR\` for a matching skill.
+2. Read the full matched \`SKILL.md\`.
+3. Follow its Process steps in order.
+4. Apply referenced common-skills from \`$GLOBAL_COMMON_DIR\`.
+5. Deliver in the specified output format.
+
+## Pre-PR Quality Gate (Required)
+
+Before opening or merging any PR, run:
+
+\`\`\`bash
+./scripts/gate-status-check.sh agent.todo.md
+./scripts/design-readiness-check.sh --allow-open skills/requirement-study/references/requirement-template.md docs/specs/SPEC_TEMPLATE.md
+\`\`\`
 EOF
     record_manifest "$path" "file"
     echo "  Wrote Gemini global config: $path"

@@ -12,16 +12,18 @@ Canonical cross-session task ledger for all agents working in this repository.
 
 - Current Phase: requirement-study
 - Next Phase: implementation-sketch
-- Repository: [set repo URL]
-- Default Branch Strategy: [trunk | gitflow | other]
+- Current Gate: G1 Requirements
+- Next Step: Finalize open requirements decisions, then advance to G2
+- Repository: https://github.com/gyanranjan/polyagent-skills
+- Default Branch Strategy: trunk (main)
 - **Lifecycle Process:** `common-skills/development-lifecycle-gates.md`
 
 ## Gate Status
 
 | Gate | Name | Status | Evidence | Skip Reason |
 |------|------|--------|----------|-------------|
-| G0 | Discovery | Not Started | — | — |
-| G1 | Requirements | Not Started | — | — |
+| G0 | Discovery | Passed | `common-skills/development-lifecycle-gates.md` | — |
+| G1 | Requirements | In Progress | `common-skills/development-lifecycle-gates.md` | — |
 | G2 | Design | Not Started | — | — |
 | G3 | POC / Spike | Not Started | — | — |
 | G4 | Implementation | Not Started | — | — |
@@ -34,7 +36,7 @@ Gate rules: See `common-skills/development-lifecycle-gates.md`. Gates are mandat
 
 | Artifact | Locked By | Since (UTC) | Purpose | Expected Release |
 |----------|-----------|-------------|---------|------------------|
-| [path/to/file] | [agent-id] | YYYY-MM-DD HH:MM | [reason] | YYYY-MM-DD HH:MM |
+| (none) | — | — | — | — |
 
 Lock policy:
 - Acquire lock before major edits to shared artifacts.
@@ -43,29 +45,30 @@ Lock policy:
 
 ## Now
 
-- [ ] TASK-001 | Owner: [agent-id] | Artifact: [path] | Status: in_progress | DependsOn: -
+- [ ] TASK-101 | Owner: codex | Artifact: scripts/md-to-pdf.sh | Status: in_progress | DependsOn: -
 
 ## Next
 
-- [ ] TASK-002 | Owner: [agent-id] | Artifact: [path] | Status: todo | DependsOn: TASK-001
+- [ ] TASK-102 | Owner: codex | Artifact: adapters/* + docs consistency | Status: todo | DependsOn: TASK-101
 
 ## Blocked
 
-- [ ] TASK-003 | Owner: [agent-id] | Blocker: [what is blocked] | Needs: [decision/input]
+- [ ] (none)
 
 ## Decision Needed
 
-- [ ] DEC-001 | Owner: [agent-id] | Decision: [question] | Options: [A/B/C] | Due: YYYY-MM-DD
+- [ ] DEC-101 | Owner: maintainer | Decision: Require pre-PR gate checks in all adapters or Codex-only? | Options: all adapters / codex-only | Due: 2026-03-05
 
 ## Done
 
-- [x] TASK-000 | Owner: [agent-id] | Artifact: [path] | Completed: YYYY-MM-DD HH:MM UTC
+- [x] TASK-099 | Owner: codex | Artifact: scripts/gate-status-check.sh | Completed: 2026-03-03 07:44 UTC
+- [x] TASK-100 | Owner: codex | Artifact: scripts/install-global-all.sh + adapters/codex/AGENTS.md | Completed: 2026-03-03 07:44 UTC
 
 ## Handoffs
 
 | Time (UTC) | From | To | Task | Context | Next Step |
 |------------|------|----|------|---------|-----------|
-| YYYY-MM-DD HH:MM | [agent-a] | [agent-b] | TASK-001 | [brief context] | [clear next step] |
+| 2026-03-03 07:44 | codex | codex | TASK-101 | Medium and high findings fixed; validating PDF + Mermaid rendering on Chromium | Finalize low-severity cleanup and report |
 
 ## GitHub Mapping
 

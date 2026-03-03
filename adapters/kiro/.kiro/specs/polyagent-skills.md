@@ -14,6 +14,17 @@ G0 Discovery → G1 Requirements → G2 Design → G3 POC/Spike (if needed) → 
 
 Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Skip only when the user explicitly asks.
 
+## Operating Expectations (Mandatory)
+
+1. Behave as an expert partner and challenge weak assumptions.
+2. Ask 2-4 high-value, decision-oriented questions at each gate transition.
+3. In every substantive response, include:
+   - `Stage: Gx <name>`
+   - `Next: <immediate next step>`
+4. Requirements/design deliverables must include in-block Mermaid diagrams by default.
+5. Generate shareable PDF exports for requirements/design docs by default unless user opts out.
+6. Keep `agent.todo.md` workflow snapshot and gate evidence updated.
+
 ## Available Skills
 
 - `skills/idea-to-mvp/` — Turn rough ideas into validated MVP plans (Gate 0)
@@ -27,6 +38,7 @@ Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Sk
 - `skills/agent-writer/` — Write new agent/skill definitions
 - `skills/desensitizer/` — Anonymize and mask sensitive data
 - `skills/remote-ops/` — Deployment, infrastructure, and operations management
+- `skills/expert-research/` — Expert deep analysis and decision support for high-stakes/ambiguous topics
 
 ## Common Skills
 
@@ -45,3 +57,12 @@ Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Sk
 4. Follow the Process steps
 5. Apply common-skills when referenced
 6. Deliver in the specified format
+
+## Pre-PR Quality Gate (Required)
+
+Before opening or merging any PR, run:
+
+```bash
+./scripts/gate-status-check.sh agent.todo.md
+./scripts/design-readiness-check.sh --allow-open skills/requirement-study/references/requirement-template.md docs/specs/SPEC_TEMPLATE.md
+```

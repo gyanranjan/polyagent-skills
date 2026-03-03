@@ -8,7 +8,27 @@ Mandatory gated process that every development task follows by default. Gates en
 
 **Do not start coding until Gates 0–2 are passed (or explicitly skipped by the user).**
 
-When you receive any task that involves building something, check the gate status in `agent.todo.md`. Begin at the earliest gate that is `Not Started`. If no gate status section exists, start at Gate 0.
+When you receive any task that involves building something, check the gate status in `agent.todo.md`. Begin at the earliest incomplete gate (`Not Started` or `In Progress`). If no gate status section exists, start at Gate 0.
+
+## Expert Interaction Protocol (Mandatory)
+
+These behaviors are required for all gates unless the user explicitly opts out.
+
+1. **Act like a domain expert, not a passive scribe.**
+   - Proactively challenge weak assumptions.
+   - Offer better alternatives when tradeoffs are clear.
+2. **Ask value-adding questions early.**
+   - At each gate transition, ask 2–4 high-leverage questions that reduce downstream rework.
+   - Questions must be specific, decision-oriented, and tied to risk/scope.
+3. **Always call out stage and next step in user-facing responses.**
+   - Include a short status line: `Stage: Gx <name> | Next: <immediate action>`.
+   - Keep this visible in every substantive response.
+4. **Default to diagram-first and share-ready artifacts.**
+   - For requirements/design deliverables, include at least one in-block Mermaid diagram by default.
+   - Generate a shareable PDF by default (unless user says they only want Markdown).
+5. **Persist stage tracking in `agent.todo.md`.**
+   - Keep `Workflow Snapshot` (`Current Phase`, `Next Phase`) updated each round.
+   - Keep Gate Status evidence links current.
 
 ## The Seven Gates
 
@@ -55,6 +75,8 @@ When you receive any task that involves building something, check the gate statu
 - [ ] Non-functional requirements are measurable
 - [ ] Gaps and open questions are surfaced (not silently resolved)
 - [ ] Stakeholder has confirmed scope
+- [ ] Requirements artifact includes at least one Mermaid diagram
+- [ ] Shareable PDF export has been produced (unless explicitly waived)
 
 **Deliverable:** Requirements document (`requirement-study-<topic>.md`)
 
@@ -82,6 +104,8 @@ When you receive any task that involves building something, check the gate statu
 - [ ] Design readiness gate checklist completed (all items decided or deferred with owner)
 - [ ] Risk register populated with mitigations
 - [ ] Task breakdown exists with dependencies
+- [ ] Design artifact includes Mermaid diagrams for key flows/components
+- [ ] Shareable PDF export has been produced (unless explicitly waived)
 
 **Deliverable:** Implementation sketch (`implementation-sketch-<topic>.md`) with design readiness gate table.
 
@@ -274,3 +298,5 @@ This gate system orchestrates existing skills — it does not replace them:
 - [ ] Skipped gates have documented reasons
 - [ ] Each passed gate has a deliverable artifact linked in the Evidence column
 - [ ] Agent warns (once, concisely) before honoring a skip request
+- [ ] User-facing responses include `Stage` and `Next` status line
+- [ ] Requirements/design artifacts include Mermaid diagrams and shareable PDF by default

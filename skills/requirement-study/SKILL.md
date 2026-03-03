@@ -8,7 +8,7 @@ description: >
   "what do we need to build", "write me a spec", or "break this down into requirements".
 tags: [requirements, prd, analysis, specification, product]
 version: "1.0.0"
-common-skills-used: [agent-todo-ledger, design-readiness-gate, document-tail-sections, output-formatting, quality-checklist]
+common-skills-used: [agent-todo-ledger, design-readiness-gate, document-tail-sections, mermaid-to-pdf, output-formatting, quality-checklist]
 agents-tested: [claude-code, kiro]
 ---
 
@@ -59,6 +59,13 @@ fi
 ```
 
 If `mmdc` is missing, add a task to `agent.todo.md` under `Next` or `Blocked`.
+
+### Interaction Protocol (Mandatory)
+
+For all substantive responses while running this skill:
+- Include `Stage: Gx <name>` and `Next: <immediate next step>`
+- At each gate transition, ask 2-4 decision-oriented questions before advancing
+- Challenge weak assumptions and propose stronger alternatives with rationale
 
 ### Step 2: Understand the Domain
 
@@ -126,7 +133,8 @@ Assemble into a document following `common-skills/output-formatting.md`:
 8. Assumptions
 9. Out of Scope
 10. Gaps and Open Questions
-11. Tail sections per `common-skills/document-tail-sections.md`
+11. At least one in-block Mermaid diagram (flow, context, or dependency view)
+12. Tail sections per `common-skills/document-tail-sections.md`
 
 ### Step 8: Build Design Readiness Handoff (Pre-Coding)
 
@@ -147,7 +155,17 @@ Update `agent.todo.md` using `common-skills/agent-todo-ledger.md`:
 
 If GitHub integration is available, create issue stubs for `REQ-*` and reflect IDs in both the requirements doc and `agent.todo.md`.
 
-### Step 10: Quality Check
+### Step 10: Export Shareable PDF (Default)
+
+Unless the user explicitly opts out, export a PDF copy of the requirements doc:
+
+```bash
+./scripts/md-to-pdf.sh requirement-study-<topic>.md requirement-study-<topic>.pdf
+```
+
+Add the generated PDF path to `agent.todo.md` gate evidence.
+
+### Step 11: Quality Check
 
 Apply `common-skills/quality-checklist.md` before delivering.
 
@@ -156,6 +174,8 @@ Additional requirement-specific checks:
 - [ ] No requirement uses vague language ("fast", "easy", "user-friendly") without measurable criteria
 - [ ] Dependencies between requirements are identified
 - [ ] Out of Scope section exists and is explicit
+- [ ] At least one Mermaid diagram is included in the requirements artifact
+- [ ] Shareable PDF export produced (unless user explicitly waived)
 
 ## Output Format
 
@@ -168,6 +188,8 @@ A Markdown document (`.md`) following the structure in Step 7. Filename: `requir
 - [ ] Assumptions, constraints, and out-of-scope are explicit and non-overlapping
 - [ ] Open questions are surfaced without silently resolving ambiguity
 - [ ] Pre-coding design readiness handoff exists or unresolved items are explicitly blocked in `agent.todo.md`
+- [ ] At least one in-block Mermaid diagram exists
+- [ ] Shareable PDF export exists or waiver is documented
 
 ## Edge Cases
 
@@ -180,5 +202,6 @@ A Markdown document (`.md`) following the structure in Step 7. Filename: `requir
 - `common-skills/agent-todo-ledger.md` — Maintain user-visible cross-session task state
 - `common-skills/design-readiness-gate.md` — Define pre-coding architecture and operational decision gate
 - `common-skills/document-tail-sections.md` — Standard document endings
+- `common-skills/mermaid-to-pdf.md` — Canonical Mermaid diagram export workflow
 - `common-skills/output-formatting.md` — Consistent formatting
 - `common-skills/quality-checklist.md` — Pre-delivery quality gate

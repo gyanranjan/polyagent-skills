@@ -49,7 +49,7 @@ gate_section=$(awk '/^## Gate Status/{found=1; next} /^## /{if(found) exit} foun
 current_gate=""
 skipped_gates=""
 all_pre_impl_passed=true
-impl_ready=false
+g3_status=""
 
 while IFS='|' read -r _ gate name status evidence skip_reason _; do
   # Skip header and separator rows
@@ -102,10 +102,7 @@ while IFS='|' read -r _ gate name status evidence skip_reason _; do
       esac
       ;;
     G3)
-      case "$status" in
-        "Passed"|"Skipped"|"N/A") ;;
-        "Not Started"|"In Progress") all_pre_impl_passed=false ;;
-      esac
+      g3_status="$status"
       ;;
   esac
 
@@ -125,6 +122,16 @@ if [[ -n "$skipped_gates" ]]; then
 fi
 
 echo ""
+
+# Gate 3 is conditional. Only block when it has started but is incomplete.
+if [[ "$g3_status" == "In Progress" ]]; then
+  all_pre_impl_passed=false
+fi
+
+if [[ "$g3_status" == "Not Started" ]]; then
+  echo "Note: G3 is conditional. If no high-risk spike is needed, mark G3 as N/A."
+  echo ""
+fi
 
 # Implementation readiness verdict
 if $all_pre_impl_passed; then

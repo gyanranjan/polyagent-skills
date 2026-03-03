@@ -8,7 +8,7 @@ description: >
   or "create a technical plan".
 tags: [implementation, design, architecture, technical-plan, tasks]
 version: "1.0.0"
-common-skills-used: [agent-todo-ledger, design-readiness-gate, document-tail-sections, output-formatting, quality-checklist]
+common-skills-used: [agent-todo-ledger, design-readiness-gate, document-tail-sections, mermaid-to-pdf, output-formatting, quality-checklist]
 agents-tested: [claude-code, kiro]
 ---
 
@@ -58,6 +58,13 @@ fi
 ```
 
 If `mmdc` is missing, update `agent.todo.md` with a tooling task.
+
+### Interaction Protocol (Mandatory)
+
+For all substantive responses while running this skill:
+- Include `Stage: Gx <name>` and `Next: <immediate next step>`
+- At each gate transition, ask 2-4 decision-oriented questions before advancing
+- Challenge weak assumptions and provide better alternatives where tradeoffs are clear
 
 ### Step 2: Understand What's Being Built
 
@@ -130,7 +137,7 @@ Follow `common-skills/output-formatting.md`:
 1. Title and metadata
 2. Summary (what and why, 3-5 sentences)
 3. Technical Decisions (with rationale)
-4. Component Design (with diagram description)
+4. Component Design (with in-block Mermaid diagrams)
 5. Interface Definitions
 6. Risks and Unknowns
 7. Task Breakdown by Phase
@@ -156,13 +163,25 @@ Update `agent.todo.md` using `common-skills/agent-todo-ledger.md`:
 - Add handoffs when moving work between agents
 - Link planned implementation tasks to requirement IDs and GitHub issue IDs where known
 
-### Step 11: Quality Check
+### Step 11: Export Shareable PDF (Default)
+
+Unless the user explicitly opts out, export a PDF copy of the implementation sketch:
+
+```bash
+./scripts/md-to-pdf.sh implementation-sketch-<topic>.md implementation-sketch-<topic>.pdf
+```
+
+Add the generated PDF path to `agent.todo.md` gate evidence.
+
+### Step 12: Quality Check
 
 Apply `common-skills/quality-checklist.md` plus:
 - [ ] Every component has a clear single responsibility
 - [ ] Technical decisions include rationale, not just choices
 - [ ] Task estimates are relative (S/M/L) if absolute time isn't known
 - [ ] Risks have mitigation strategies or at least next steps
+- [ ] Key flows/components are represented with Mermaid diagrams
+- [ ] Shareable PDF export produced (unless user explicitly waived)
 
 ## Output Format
 
@@ -175,12 +194,15 @@ Markdown document: `implementation-sketch-<topic>.md`
 - [ ] Risks include mitigation or concrete next-step actions
 - [ ] Task breakdown has dependencies and a buildable phase order
 - [ ] Design readiness gate is passed or coding is explicitly blocked in `agent.todo.md`
+- [ ] At least one in-block Mermaid diagram exists for key design flows/components
+- [ ] Shareable PDF export exists or waiver is documented
 
 ## Common Skills Used
 
 - `common-skills/agent-todo-ledger.md` — Multi-agent task ownership, locks, and handoffs
 - `common-skills/design-readiness-gate.md` — Enforce pre-coding architecture and operational readiness
 - `common-skills/document-tail-sections.md` — Standard document endings
+- `common-skills/mermaid-to-pdf.md` — Canonical Mermaid diagram export workflow
 - `common-skills/output-formatting.md` — Consistent formatting
 - `common-skills/quality-checklist.md` — Pre-delivery quality gate
 
