@@ -38,6 +38,5 @@ Each skill directory contains a SKILL.md with: Purpose, When to Use, Inputs, Pro
 Before opening or merging any PR, run:
 
 ```bash
-./scripts/gate-status-check.sh agent.todo.md
-./scripts/design-readiness-check.sh --allow-open skills/requirement-study/references/requirement-template.md docs/specs/SPEC_TEMPLATE.md
+./scripts/polyagentctl.py check --strict --project .
 ```

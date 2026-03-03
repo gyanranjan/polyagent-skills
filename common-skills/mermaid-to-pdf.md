@@ -28,6 +28,7 @@ The script auto-selects the best available approach with this precedence:
 3. **Fallback:** HTML artifact for manual browser print-to-PDF
 
 This keeps one reliable implementation in the repository and avoids drift.
+For static flowchart/ER fallback rendering, `scripts/md-to-pdf.sh` uses reusable helper `scripts/md-to-pdf-renderer.py`.
 
 ## Strategy Details
 
@@ -93,6 +94,9 @@ When writing Mermaid diagrams that will be exported to PDF, follow these rules:
 ```bash
 # Auto-selects best path (A or B) based on available tools
 ./scripts/md-to-pdf.sh input.md output.pdf
+
+# Unified CLI wrapper (preferred for future tooling compatibility)
+./scripts/polyagentctl.py export-pdf input.md output.pdf
 
 # Force HTML render path (no mmdc needed)
 ./scripts/md-to-pdf.sh --html input.md output.html

@@ -19,6 +19,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # --- Argument parsing ---------------------------------------------------------
 
 FORCE_HTML=false
@@ -174,6 +176,18 @@ fi
 HAS_PANDOC=false
 if command -v pandoc >/dev/null 2>&1; then
   HAS_PANDOC=true
+fi
+
+HAS_PY_MARKDOWNIT=false
+if command -v python3 >/dev/null 2>&1; then
+  if python3 - <<'PY' >/dev/null 2>&1
+import importlib.util
+import sys
+sys.exit(0 if importlib.util.find_spec("markdown_it") else 1)
+PY
+  then
+    HAS_PY_MARKDOWNIT=true
+  fi
 fi
 
 # Detect headless browser for HTML→PDF conversion
@@ -372,10 +386,43 @@ fi
 
 echo "==> Generating self-contained HTML with Mermaid JS..."
 
+MERMAID_STATIC_ELIGIBLE=false
+if [ "$MERMAID_BLOCK_COUNT" -gt 0 ]; then
+  if awk '
+  BEGIN { in_mermaid=0; need_first=0; invalid=0 }
+  /^```mermaid/ { in_mermaid=1; need_first=1; next }
+  in_mermaid && /^```$/ { in_mermaid=0; need_first=0; next }
+  in_mermaid && need_first {
+    line=$0
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+    if (line == "") next
+    if (line ~ /^(flowchart|erDiagram)([[:space:]].*)?$/) {
+      need_first=0
+      next
+    }
+    invalid=1
+    exit
+  }
+  END { exit invalid }
+  ' "$SOURCE_MD"; then
+    MERMAID_STATIC_ELIGIBLE=true
+  fi
+fi
+
+USED_PY_STATIC_RENDER=false
+HTML_OUTPUT="$WORK_DIR/output.html"
+
+if [ "$HAS_PY_MARKDOWNIT" = "true" ] && [ "$MERMAID_STATIC_ELIGIBLE" = "true" ]; then
+  echo "==> Using Python markdown-it static renderer for Mermaid flowchart/erDiagram blocks"
+  USED_PY_STATIC_RENDER=true
+  python3 "$SCRIPT_DIR/md-to-pdf-renderer.py" "$SOURCE_MD" "$HTML_OUTPUT"
+fi
+
 # Convert Markdown to HTML body.
 # Mermaid fenced blocks become <div class="mermaid"> for the JS library to render.
 HTML_BODY_FILE="$WORK_DIR/body.html"
 
+if [ "$USED_PY_STATIC_RENDER" = "false" ]; then
 awk '
 BEGIN { in_mermaid = 0; in_code = 0; in_list = 0 }
 
@@ -485,7 +532,6 @@ END {
 DOC_TITLE=$(grep -m1 '^# ' "$SOURCE_MD" | sed 's/^# //' || echo "Document")
 
 # Build self-contained HTML with Mermaid JS
-HTML_OUTPUT="$WORK_DIR/output.html"
 cat > "$HTML_OUTPUT" <<HTMLEOF
 <!DOCTYPE html>
 <html lang="en">
@@ -587,12 +633,13 @@ cat >> "$HTML_OUTPUT" <<'HTMLEOF'
 HTMLEOF
 
 echo "==> HTML generated with embedded Mermaid JS"
+fi
 
 # --- If pandoc is available, use it for better Markdown→HTML conversion --------
 # Rebuild the HTML body using pandoc (better table, list, and inline formatting support)
 # but keep our Mermaid JS wrapper intact.
 
-if [ "$HAS_PANDOC" = "true" ]; then
+if [ "$HAS_PANDOC" = "true" ] && [ "$USED_PY_STATIC_RENDER" = "false" ]; then
   echo "==> Rebuilding body with pandoc for better formatting..."
 
   # Convert mermaid blocks to placeholder divs before pandoc
@@ -749,6 +796,7 @@ NODESCRIPT
       --no-sandbox \
       --run-all-compositor-stages-before-draw \
       --virtual-time-budget=15000 \
+      --allow-file-access-from-files \
       --print-to-pdf="$FINAL_OUTPUT" \
       --print-to-pdf-no-header \
       "file://$HTML_OUTPUT" 2>/dev/null; then

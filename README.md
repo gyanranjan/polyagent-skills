@@ -58,6 +58,16 @@ cd polyagent-skills
 
 Use global install when you want "set once, reuse everywhere." Use project install when you want repo-local agent config files.
 
+Preferred unified CLI:
+
+```bash
+# One command surface for checks/install/export
+./scripts/polyagentctl.py check
+./scripts/polyagentctl.py install-global copy
+./scripts/polyagentctl.py export-pdf docs/spec.md docs/spec.pdf
+./scripts/polyagentctl.py self-install
+```
+
 ## Spec-Driven Delivery Flow
 
 ```mermaid
@@ -207,7 +217,9 @@ polyagent-skills/
 │   ├── sync-agent-todo.sh
 │   ├── sync-adapters.sh
 │   ├── pull-skill.sh
-│   └── md-to-pdf.sh
+│   ├── md-to-pdf.sh
+│   ├── md-to-pdf-renderer.py
+│   └── polyagentctl.py
 │
 ├── agent-notes/               # Cross-cutting agent observations
 │
