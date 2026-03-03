@@ -126,6 +126,7 @@ This copies adapters plus `skills/` and `common-skills/` into that specific proj
 
 | Skill | Purpose | Status |
 |-------|---------|--------|
+| [idea-to-mvp](skills/idea-to-mvp/) | Turn a rough idea into a validated MVP plan | ✅ Active |
 | [requirement-study](skills/requirement-study/) | Analyze, write, and validate requirements | ✅ Active |
 | [implementation-sketch](skills/implementation-sketch/) | Create implementation plans from specs | ✅ Active |
 | [mail-summarizer](skills/mail-summarizer/) | Summarize and draft replies to emails | ✅ Active |
@@ -169,9 +170,11 @@ polyagent-skills/
 │   ├── design-readiness-gate.md
 │   ├── document-tail-sections.md
 │   ├── output-formatting.md
-│   └── quality-checklist.md
+│   ├── quality-checklist.md
+│   └── mermaid-to-pdf.md
 │
 ├── skills/                    # Portable skill library
+│   ├── idea-to-mvp/
 │   ├── requirement-study/
 │   ├── implementation-sketch/
 │   ├── mail-summarizer/
@@ -201,7 +204,8 @@ polyagent-skills/
 │   ├── init-requirement-issues.sh
 │   ├── sync-agent-todo.sh
 │   ├── sync-adapters.sh
-│   └── pull-skill.sh
+│   ├── pull-skill.sh
+│   └── md-to-pdf.sh
 │
 ├── agent-notes/               # Cross-cutting agent observations
 │
@@ -245,6 +249,9 @@ polyagent-skills/
 
 # Create GitHub issue stubs from REQ IDs
 ./scripts/init-requirement-issues.sh path/to/requirements.md org/repo
+
+# Convert Markdown with Mermaid diagrams to PDF (pre-renders diagrams)
+./scripts/md-to-pdf.sh path/to/document.md output.pdf
 ```
 
 ## License

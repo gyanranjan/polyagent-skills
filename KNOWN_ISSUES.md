@@ -92,6 +92,26 @@ Tracking known limitations, agent quirks, and workarounds.
 
 ---
 
+## KI-008: Mermaid diagrams lost or degraded when converting Markdown to PDF
+
+**Status:** In Progress
+**Severity:** High
+**Agents affected:** All
+
+**Problem:** Standard Markdown-to-PDF converters (pandoc, markdown-pdf, etc.) do not natively render Mermaid codeblocks. This causes diagrams to either appear as raw code text in the PDF, be silently dropped, or render as low-resolution blurry images. This affects any skill that produces documents with architecture diagrams, flow charts, or other Mermaid visuals.
+
+**Workaround:** Use the two-step pipeline documented in `common-skills/mermaid-to-pdf.md`:
+1. Pre-render Mermaid blocks to SVG/PNG via `mmdc` (Mermaid CLI)
+2. Replace codeblocks with image references before PDF conversion
+
+An automated script `scripts/md-to-pdf.sh` handles this pipeline. Skills that produce Mermaid diagrams should follow the PDF-safe authoring guidelines (short labels, max 15 nodes per diagram, simple node shapes) to ensure clean rendering.
+
+**Requirements:** `npm install -g @mermaid-js/mermaid-cli` and either `pandoc + xelatex` or `wkhtmltopdf`.
+
+**Tracking:** The `common-skills/mermaid-to-pdf.md` guide and `scripts/md-to-pdf.sh` script provide the current solution. Will monitor for native Mermaid support in pandoc or other converters.
+
+---
+
 ## Adding a New Known Issue
 
 Use this format:
