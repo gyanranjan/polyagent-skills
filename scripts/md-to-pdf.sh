@@ -44,6 +44,14 @@ if [ -z "$OUTPUT" ]; then
   fi
 fi
 
+# Resolve output to absolute path early so Path A can safely `cd` into WORK_DIR
+if [[ "$OUTPUT" = /* ]]; then
+  OUTPUT_ABS="$OUTPUT"
+else
+  OUTPUT_ABS="$(pwd)/$OUTPUT"
+fi
+mkdir -p "$(dirname "$OUTPUT_ABS")"
+
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -51,7 +59,7 @@ INPUT_ABS="$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")"
 PROCESSED_MD="$WORK_DIR/processed.md"
 
 echo "==> Processing: $INPUT"
-echo "==> Output:     $OUTPUT"
+echo "==> Output:     $OUTPUT_ABS"
 echo "==> Work dir:   $WORK_DIR"
 
 # --- Check tooling -----------------------------------------------------------
@@ -59,8 +67,15 @@ echo "==> Work dir:   $WORK_DIR"
 HAS_MMDC=false
 if command -v mmdc >/dev/null 2>&1; then
   HAS_MMDC=true
+  MMDC_CMD="mmdc"
   echo "==> mmdc: $(mmdc --version 2>&1 | head -1)"
+elif command -v npx >/dev/null 2>&1; then
+  # Allow ephemeral Mermaid CLI when globally installed mmdc is unavailable.
+  HAS_MMDC=true
+  MMDC_CMD="npx -y @mermaid-js/mermaid-cli"
+  echo "==> mmdc: via npx (@mermaid-js/mermaid-cli)"
 else
+  MMDC_CMD=""
   echo "==> mmdc: NOT FOUND"
 fi
 
@@ -175,7 +190,7 @@ PCONF
       base="$(basename "$mmd_file" .mmd)"
       png_file="$WORK_DIR/${base}.png"
       echo "    Rendering: $base"
-      if mmdc \
+      if $MMDC_CMD \
         -i "$mmd_file" \
         -o "$png_file" \
         -c "$MERMAID_CONFIG" \
@@ -198,7 +213,7 @@ PCONF
   case "$PDF_ENGINE" in
     pandoc-xelatex)
       echo "==> Converting with pandoc + xelatex"
-      pandoc "$PROCESSED_MD" -o "$OUTPUT" \
+      pandoc "$PROCESSED_MD" -o "$OUTPUT_ABS" \
         --pdf-engine=xelatex \
         -V geometry:margin=1in \
         -V mainfont="DejaVu Sans" \
@@ -206,22 +221,22 @@ PCONF
         --highlight-style=tango \
         --toc \
         -f markdown+implicit_figures
-      echo "==> PDF created: $OUTPUT"
+      echo "==> PDF created: $OUTPUT_ABS"
       ;;
     pandoc-weasyprint)
       echo "==> Converting with pandoc + weasyprint"
-      pandoc "$PROCESSED_MD" -o "$OUTPUT" \
+      pandoc "$PROCESSED_MD" -o "$OUTPUT_ABS" \
         --pdf-engine=weasyprint \
         --toc \
         -f markdown+implicit_figures
-      echo "==> PDF created: $OUTPUT"
+      echo "==> PDF created: $OUTPUT_ABS"
       ;;
     pandoc-html-wkhtmltopdf)
       echo "==> Converting via pandoc (HTML) + wkhtmltopdf"
       pandoc "$PROCESSED_MD" -o "$WORK_DIR/temp.html" \
         --standalone --toc -f markdown+implicit_figures
-      wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT"
-      echo "==> PDF created: $OUTPUT"
+      wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT_ABS"
+      echo "==> PDF created: $OUTPUT_ABS"
       ;;
     wkhtmltopdf)
       echo "==> Converting with wkhtmltopdf"
@@ -234,8 +249,8 @@ PCONF
           echo "</body></html>"
         } > "$WORK_DIR/temp.html"
       fi
-      wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT"
-      echo "==> PDF created: $OUTPUT"
+      wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT_ABS"
+      echo "==> PDF created: $OUTPUT_ABS"
       ;;
   esac
 
@@ -467,7 +482,7 @@ fi
 
 # --- Attempt PDF conversion via headless browser or puppeteer -----------------
 
-FINAL_OUTPUT="$OUTPUT"
+FINAL_OUTPUT="$OUTPUT_ABS"
 
 # Determine if we should try PDF output
 TRY_PDF=true
@@ -490,6 +505,7 @@ if [ "$TRY_PDF" = "true" ]; then
       --disable-gpu \
       --no-sandbox \
       --run-all-compositor-stages-before-draw \
+      --virtual-time-budget=15000 \
       --print-to-pdf="$FINAL_OUTPUT" \
       --print-to-pdf-no-header \
       "file://$HTML_OUTPUT" 2>/dev/null; then
