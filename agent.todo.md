@@ -4,7 +4,7 @@ Canonical cross-session task ledger for all agents working in this repository.
 
 ## Metadata
 
-- Last Updated: 2026-03-01
+- Last Updated: 2026-03-03
 - Canonical Source: this file
 - Coordination Rule: single writer per artifact
 
@@ -14,6 +14,21 @@ Canonical cross-session task ledger for all agents working in this repository.
 - Next Phase: implementation-sketch
 - Repository: [set repo URL]
 - Default Branch Strategy: [trunk | gitflow | other]
+- **Lifecycle Process:** `common-skills/development-lifecycle-gates.md`
+
+## Gate Status
+
+| Gate | Name | Status | Evidence | Skip Reason |
+|------|------|--------|----------|-------------|
+| G0 | Discovery | Not Started | — | — |
+| G1 | Requirements | Not Started | — | — |
+| G2 | Design | Not Started | — | — |
+| G3 | POC / Spike | Not Started | — | — |
+| G4 | Implementation | Not Started | — | — |
+| G5 | Review | Not Started | — | — |
+| G6 | Ship & Learn | Not Started | — | — |
+
+Gate rules: See `common-skills/development-lifecycle-gates.md`. Gates are mandatory by default — skip requires explicit user request.
 
 ## Locks
 

@@ -16,15 +16,35 @@ Apply these guidelines when:
 - The user asks to export a document to PDF
 - Any document with `mermaid` codeblocks needs to become a PDF
 
-## Strategy: Pre-Render Then Convert
+## Strategy
 
-The reliable approach is a two-step pipeline:
+The script `scripts/md-to-pdf.sh` auto-selects the best available approach:
 
-1. **Pre-render** each Mermaid codeblock to a high-resolution image (SVG preferred, PNG fallback)
+### Path A: Pre-Render Then Convert (Best Quality)
+
+When `mmdc` (Mermaid CLI) is installed:
+
+1. **Pre-render** each Mermaid codeblock to a high-resolution PNG via `mmdc`
 2. **Replace** the Mermaid codeblock in Markdown with an image reference
-3. **Convert** the image-embedded Markdown to PDF using a standard converter
+3. **Convert** the image-embedded Markdown to PDF via pandoc or wkhtmltopdf
 
-This avoids depending on any single tool to handle both Mermaid parsing and PDF generation.
+### Path B: HTML with Mermaid JS (No mmdc Needed)
+
+When `mmdc` is NOT installed:
+
+1. **Generate** a self-contained HTML file with Mermaid JS from CDN
+2. Mermaid blocks become `<div class="mermaid">` elements rendered by the browser
+3. **Convert** to PDF via headless browser (Chromium, puppeteer) or open in any browser and print
+
+This path requires no pre-rendering tools — the browser renders Mermaid natively.
+
+### Fallback: HTML File
+
+When no PDF converter is available:
+
+1. Produce a self-contained HTML file with live Mermaid diagrams
+2. Open in any browser to view rendered diagrams
+3. Print to PDF from the browser (Ctrl+P / Cmd+P)
 
 ## Authoring Guidelines (PDF-Safe Mermaid)
 
@@ -55,20 +75,22 @@ When writing Mermaid diagrams that will be exported to PDF, follow these rules:
 
 ## Conversion Process
 
-### Option A: Automated Script (`scripts/md-to-pdf.sh`)
+### Option A: Automated Script (`scripts/md-to-pdf.sh`) — Recommended
 
 ```bash
-# Convert a Markdown file with Mermaid to PDF
+# Auto-selects best path (A or B) based on available tools
 ./scripts/md-to-pdf.sh input.md output.pdf
 
-# The script handles:
-# 1. Extracts Mermaid codeblocks
-# 2. Renders each to SVG via mmdc
-# 3. Replaces codeblocks with image references
-# 4. Converts to PDF via pandoc or wkhtmltopdf
+# Force HTML render path (no mmdc needed)
+./scripts/md-to-pdf.sh --html input.md output.html
+
+# The script auto-detects:
+# - mmdc available?        → Path A (pre-render to images)
+# - Chromium/puppeteer?    → Path B (HTML → headless browser → PDF)
+# - Nothing available?     → Fallback (HTML with live Mermaid for browser viewing)
 ```
 
-### Option B: Manual Steps
+### Option B: Manual Steps (Path A)
 
 If the script is not available or tools are missing, follow these steps:
 
@@ -137,9 +159,25 @@ pandoc input-with-images.md -o temp.html
 wkhtmltopdf --enable-local-file-access temp.html output.pdf
 ```
 
-### Option C: No Tooling Available
+### Option C: HTML Render Path (No mmdc, No PDF Engine)
 
-If neither mmdc nor a PDF converter is installed:
+When mmdc is not available, generate an HTML file with Mermaid JS that renders diagrams in the browser:
+
+```bash
+# Generate HTML with live Mermaid diagrams
+./scripts/md-to-pdf.sh --html input.md output.html
+
+# Then either:
+# 1. Open output.html in a browser → diagrams render automatically
+# 2. Print to PDF from the browser (Ctrl+P / Cmd+P)
+# 3. Install puppeteer for automated PDF: npm install -g puppeteer
+```
+
+The HTML file is self-contained with Mermaid JS loaded from CDN. It includes print-optimized CSS for clean PDF output.
+
+### Option D: No Tooling Available
+
+If no rendering tools are available at all:
 
 1. Keep Mermaid codeblocks as-is in the Markdown document
 2. Add a note at the top: "Diagrams are in Mermaid syntax. Render with a Mermaid-compatible viewer (GitHub, VS Code with Mermaid extension, mermaid.live) or install `@mermaid-js/mermaid-cli` for image export."
@@ -172,7 +210,7 @@ Save as `mermaid-pdf-config.json` and use: `mmdc -i input.mmd -o output.svg -c m
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| Diagram appears as raw code in PDF | Mermaid block not pre-rendered | Run Step 2-3 before PDF conversion |
+| Diagram appears as raw code in PDF | Mermaid block not pre-rendered | Use `md-to-pdf.sh` (auto-selects best path) or use `--html` flag for browser-based rendering |
 | Diagram is blurry in PDF | PNG at low resolution | Use SVG instead, or PNG with `-s 2` or higher |
 | Diagram labels are clipped/overlapping | Labels too long or too many nodes | Shorten labels to < 40 chars, split diagram |
 | mmdc hangs or crashes | Chromium sandbox issue in container/CI | Use `mmdc --puppeteerConfigFile` with `{"args": ["--no-sandbox"]}` |

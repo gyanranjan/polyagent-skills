@@ -1,24 +1,33 @@
 #!/usr/bin/env bash
 # md-to-pdf.sh — Convert Markdown with Mermaid diagrams to PDF
 #
-# Strategy: Pre-render Mermaid blocks to images, replace in Markdown, then
-# convert the image-embedded Markdown to PDF.
+# Strategy (auto-selected):
+#   Path A: mmdc available → pre-render Mermaid to images → embed in Markdown → PDF via pandoc/wkhtmltopdf
+#   Path B: mmdc NOT available → generate HTML with Mermaid JS → PDF via headless browser
+#   Fallback: produce self-contained HTML with live Mermaid (viewable in any browser)
 #
 # Usage:
 #   ./scripts/md-to-pdf.sh input.md [output.pdf]
+#   ./scripts/md-to-pdf.sh --html input.md [output.html]   # Force HTML render path
 #
-# If output.pdf is omitted, the output file is input-name.pdf in the same directory.
+# If output is omitted, the output file is input-name.pdf (or .html) in the same directory.
 #
-# Requirements:
-#   - mmdc (npm install -g @mermaid-js/mermaid-cli)  — for Mermaid rendering
-#   - pandoc + xelatex OR wkhtmltopdf                — for PDF conversion
-#
-# If mmdc is missing, Mermaid blocks are replaced with placeholder text.
-# If no PDF engine is found, a processed .md file is produced instead.
+# Requirements (at least one of):
+#   Path A: mmdc + (pandoc+xelatex | wkhtmltopdf)
+#   Path B: node (uses inline Mermaid JS; optional: puppeteer for auto PDF)
+#   Fallback: none — produces HTML viewable in any browser
 
 set -euo pipefail
 
-INPUT="${1:?Usage: md-to-pdf.sh input.md [output.pdf]}"
+# --- Argument parsing ---------------------------------------------------------
+
+FORCE_HTML=false
+if [ "${1:-}" = "--html" ]; then
+  FORCE_HTML=true
+  shift
+fi
+
+INPUT="${1:?Usage: md-to-pdf.sh [--html] input.md [output.pdf|output.html]}"
 OUTPUT="${2:-}"
 
 if [ ! -f "$INPUT" ]; then
@@ -28,7 +37,11 @@ fi
 
 # Derive output filename if not provided
 if [ -z "$OUTPUT" ]; then
-  OUTPUT="${INPUT%.md}.pdf"
+  if [ "$FORCE_HTML" = "true" ]; then
+    OUTPUT="${INPUT%.md}.html"
+  else
+    OUTPUT="${INPUT%.md}.pdf"
+  fi
 fi
 
 WORK_DIR="$(mktemp -d)"
@@ -48,11 +61,32 @@ if command -v mmdc >/dev/null 2>&1; then
   HAS_MMDC=true
   echo "==> mmdc: $(mmdc --version 2>&1 | head -1)"
 else
-  echo "==> mmdc: NOT FOUND (Mermaid blocks will be replaced with placeholders)"
+  echo "==> mmdc: NOT FOUND"
 fi
 
-PDF_ENGINE="none"
+HAS_NODE=false
+if command -v node >/dev/null 2>&1; then
+  HAS_NODE=true
+  echo "==> node: $(node --version 2>&1)"
+fi
+
+HAS_PANDOC=false
 if command -v pandoc >/dev/null 2>&1; then
+  HAS_PANDOC=true
+fi
+
+# Detect headless browser for HTML→PDF conversion
+BROWSER_CMD=""
+for cmd in chromium chromium-browser google-chrome google-chrome-stable; do
+  if command -v "$cmd" >/dev/null 2>&1; then
+    BROWSER_CMD="$cmd"
+    break
+  fi
+done
+
+# Detect PDF engine for Path A (mmdc pre-render approach)
+PDF_ENGINE="none"
+if [ "$HAS_PANDOC" = "true" ]; then
   if command -v xelatex >/dev/null 2>&1; then
     PDF_ENGINE="pandoc-xelatex"
   elif command -v weasyprint >/dev/null 2>&1; then
@@ -65,12 +99,32 @@ if command -v pandoc >/dev/null 2>&1; then
 elif command -v wkhtmltopdf >/dev/null 2>&1; then
   PDF_ENGINE="wkhtmltopdf"
 fi
-echo "==> PDF engine: $PDF_ENGINE"
 
-# --- Mermaid config for clean PDF output -------------------------------------
+# --- Decide which path to take -----------------------------------------------
 
-MERMAID_CONFIG="$WORK_DIR/mermaid-config.json"
-cat > "$MERMAID_CONFIG" <<'MCONF'
+# Path A: mmdc pre-render (best quality, requires mmdc + PDF engine)
+# Path B: HTML with Mermaid JS (no mmdc needed, renders in browser)
+
+USE_PATH="B"  # Default to HTML path
+if [ "$FORCE_HTML" = "true" ]; then
+  USE_PATH="B"
+  echo "==> Mode: HTML render (forced via --html)"
+elif [ "$HAS_MMDC" = "true" ] && [ "$PDF_ENGINE" != "none" ] && [ "$PDF_ENGINE" != "pandoc-noengine" ]; then
+  USE_PATH="A"
+  echo "==> Mode: Path A — mmdc pre-render + $PDF_ENGINE"
+else
+  echo "==> Mode: Path B — HTML with Mermaid JS (browser-rendered)"
+fi
+
+# ==============================================================================
+# PATH A: mmdc pre-render approach (original)
+# ==============================================================================
+
+if [ "$USE_PATH" = "A" ]; then
+
+  # --- Mermaid config for clean PDF output ---
+  MERMAID_CONFIG="$WORK_DIR/mermaid-config.json"
+  cat > "$MERMAID_CONFIG" <<'MCONF'
 {
   "theme": "neutral",
   "themeVariables": {
@@ -86,181 +140,469 @@ cat > "$MERMAID_CONFIG" <<'MCONF'
 }
 MCONF
 
-# --- Puppeteer config (for sandbox-restricted environments) -------------------
-
-PUPPETEER_CONFIG="$WORK_DIR/puppeteer-config.json"
-cat > "$PUPPETEER_CONFIG" <<'PCONF'
+  PUPPETEER_CONFIG="$WORK_DIR/puppeteer-config.json"
+  cat > "$PUPPETEER_CONFIG" <<'PCONF'
 {
   "args": ["--no-sandbox", "--disable-setuid-sandbox"]
 }
 PCONF
 
-# --- Extract and render Mermaid blocks ----------------------------------------
-
-DIAGRAM_COUNT=0
-IN_MERMAID=false
-MERMAID_CONTENT=""
-
-# Process the markdown line by line
-# We'll build the processed markdown and extract mermaid blocks
-cp "$INPUT_ABS" "$PROCESSED_MD"
-
-# Use awk to find and replace mermaid blocks
-awk -v workdir="$WORK_DIR" -v has_mmdc="$HAS_MMDC" '
-BEGIN {
-  in_mermaid = 0
-  diagram_count = 0
-  mermaid_content = ""
-}
-
-/^```mermaid/ {
-  in_mermaid = 1
-  diagram_count++
-  mermaid_content = ""
-  next
-}
-
-in_mermaid && /^```$/ {
-  in_mermaid = 0
-  # Write mermaid content to file
-  mmd_file = workdir "/diagram-" diagram_count ".mmd"
-  print mermaid_content > mmd_file
-  close(mmd_file)
-
-  # Output image reference
-  if (has_mmdc == "true") {
+  # --- Extract and render Mermaid blocks ---
+  awk -v workdir="$WORK_DIR" '
+  BEGIN { in_mermaid = 0; diagram_count = 0; mermaid_content = "" }
+  /^```mermaid/ { in_mermaid = 1; diagram_count++; mermaid_content = ""; next }
+  in_mermaid && /^```$/ {
+    in_mermaid = 0
+    mmd_file = workdir "/diagram-" diagram_count ".mmd"
+    print mermaid_content > mmd_file
+    close(mmd_file)
     print "![Diagram " diagram_count "](diagram-" diagram_count ".png)"
-  } else {
-    print ""
-    print "> **[Diagram " diagram_count "]** — Mermaid diagram not rendered (mmdc not installed)."
-    print "> Install with: npm install -g @mermaid-js/mermaid-cli"
-    print ""
+    next
   }
-  next
-}
-
-in_mermaid {
-  if (mermaid_content == "") {
-    mermaid_content = $0
-  } else {
-    mermaid_content = mermaid_content "\n" $0
+  in_mermaid {
+    mermaid_content = (mermaid_content == "") ? $0 : mermaid_content "\n" $0
+    next
   }
-  next
-}
+  { print }
+  ' "$INPUT_ABS" > "$PROCESSED_MD"
 
-{ print }
-' "$INPUT_ABS" > "$PROCESSED_MD"
+  DIAGRAM_COUNT=$(find "$WORK_DIR" -name 'diagram-*.mmd' 2>/dev/null | wc -l)
+  echo "==> Found $DIAGRAM_COUNT Mermaid diagram(s)"
 
-# Count how many diagrams we extracted
-DIAGRAM_COUNT=$(ls "$WORK_DIR"/diagram-*.mmd 2>/dev/null | wc -l || echo 0)
-echo "==> Found $DIAGRAM_COUNT Mermaid diagram(s)"
+  # Render each diagram with mmdc
+  if [ "$DIAGRAM_COUNT" -gt 0 ]; then
+    for mmd_file in "$WORK_DIR"/diagram-*.mmd; do
+      base="$(basename "$mmd_file" .mmd)"
+      png_file="$WORK_DIR/${base}.png"
+      echo "    Rendering: $base"
+      if mmdc \
+        -i "$mmd_file" \
+        -o "$png_file" \
+        -c "$MERMAID_CONFIG" \
+        -p "$PUPPETEER_CONFIG" \
+        -w 1200 \
+        -H 800 \
+        -s 2 \
+        -b white 2>/dev/null; then
+        echo "    OK: $png_file"
+      else
+        echo "    WARN: mmdc failed for $base, falling back to placeholder" >&2
+        sed -i "s|!\[Diagram ${base#diagram-}\](${base}.png)|> **[Diagram ${base#diagram-}]** — Rendering failed. See source Markdown for Mermaid code.|" "$PROCESSED_MD"
+      fi
+    done
+  fi
 
-# Render each diagram
-if [ "$HAS_MMDC" = "true" ] && [ "$DIAGRAM_COUNT" -gt 0 ]; then
-  for mmd_file in "$WORK_DIR"/diagram-*.mmd; do
-    base="$(basename "$mmd_file" .mmd)"
-    png_file="$WORK_DIR/${base}.png"
-    echo "    Rendering: $base"
+  # --- Convert to PDF ---
+  cd "$WORK_DIR"
 
-    if mmdc \
-      -i "$mmd_file" \
-      -o "$png_file" \
-      -c "$MERMAID_CONFIG" \
-      -p "$PUPPETEER_CONFIG" \
-      -w 1200 \
-      -H 800 \
-      -s 2 \
-      -b white 2>/dev/null; then
-      echo "    OK: $png_file"
-    else
-      echo "    WARN: mmdc failed for $base, falling back to placeholder" >&2
-      # Replace image ref with placeholder in processed markdown
-      sed -i "s|!\[Diagram ${base#diagram-}\](${base}.png)|> **[Diagram ${base#diagram-}]** — Rendering failed. See source Markdown for Mermaid code.|" "$PROCESSED_MD"
-    fi
-  done
+  case "$PDF_ENGINE" in
+    pandoc-xelatex)
+      echo "==> Converting with pandoc + xelatex"
+      pandoc "$PROCESSED_MD" -o "$OUTPUT" \
+        --pdf-engine=xelatex \
+        -V geometry:margin=1in \
+        -V mainfont="DejaVu Sans" \
+        -V monofont="DejaVu Sans Mono" \
+        --highlight-style=tango \
+        --toc \
+        -f markdown+implicit_figures
+      echo "==> PDF created: $OUTPUT"
+      ;;
+    pandoc-weasyprint)
+      echo "==> Converting with pandoc + weasyprint"
+      pandoc "$PROCESSED_MD" -o "$OUTPUT" \
+        --pdf-engine=weasyprint \
+        --toc \
+        -f markdown+implicit_figures
+      echo "==> PDF created: $OUTPUT"
+      ;;
+    pandoc-html-wkhtmltopdf)
+      echo "==> Converting via pandoc (HTML) + wkhtmltopdf"
+      pandoc "$PROCESSED_MD" -o "$WORK_DIR/temp.html" \
+        --standalone --toc -f markdown+implicit_figures
+      wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT"
+      echo "==> PDF created: $OUTPUT"
+      ;;
+    wkhtmltopdf)
+      echo "==> Converting with wkhtmltopdf"
+      if [ "$HAS_PANDOC" = "true" ]; then
+        pandoc "$PROCESSED_MD" -o "$WORK_DIR/temp.html" --standalone
+      else
+        {
+          echo "<html><head><meta charset='utf-8'><style>body{font-family:sans-serif;margin:2em;} img{max-width:100%;} pre{background:#f5f5f5;padding:1em;overflow-x:auto;}</style></head><body>"
+          cat "$PROCESSED_MD"
+          echo "</body></html>"
+        } > "$WORK_DIR/temp.html"
+      fi
+      wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT"
+      echo "==> PDF created: $OUTPUT"
+      ;;
+  esac
+
+  echo "==> Done."
+  exit 0
 fi
 
-# --- Convert to PDF ----------------------------------------------------------
+# ==============================================================================
+# PATH B: HTML render with Mermaid JS (no mmdc needed)
+# ==============================================================================
 
-cd "$WORK_DIR"
+echo "==> Generating self-contained HTML with Mermaid JS..."
 
-case "$PDF_ENGINE" in
-  pandoc-xelatex)
-    echo "==> Converting with pandoc + xelatex"
-    pandoc "$PROCESSED_MD" -o "$OUTPUT" \
-      --pdf-engine=xelatex \
-      -V geometry:margin=1in \
-      -V mainfont="DejaVu Sans" \
-      -V monofont="DejaVu Sans Mono" \
-      --highlight-style=tango \
-      --toc \
-      -f markdown+implicit_figures
-    echo "==> PDF created: $OUTPUT"
-    ;;
+# Convert Markdown to HTML body.
+# Mermaid fenced blocks become <div class="mermaid"> for the JS library to render.
+HTML_BODY_FILE="$WORK_DIR/body.html"
 
-  pandoc-weasyprint)
-    echo "==> Converting with pandoc + weasyprint"
-    pandoc "$PROCESSED_MD" -o "$OUTPUT" \
-      --pdf-engine=weasyprint \
-      --toc \
-      -f markdown+implicit_figures
-    echo "==> PDF created: $OUTPUT"
-    ;;
+awk '
+BEGIN { in_mermaid = 0; in_code = 0 }
 
-  pandoc-html-wkhtmltopdf)
-    echo "==> Converting via pandoc (HTML) + wkhtmltopdf"
-    pandoc "$PROCESSED_MD" -o "$WORK_DIR/temp.html" \
-      --standalone \
-      --toc \
-      -f markdown+implicit_figures
-    wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT"
-    echo "==> PDF created: $OUTPUT"
-    ;;
+# Mermaid fenced blocks → <div class="mermaid">
+/^```mermaid/ {
+  in_mermaid = 1
+  print "<div class=\"mermaid\">"
+  next
+}
+in_mermaid && /^```$/ {
+  in_mermaid = 0
+  print "</div>"
+  next
+}
+in_mermaid { print; next }
 
-  pandoc-noengine)
-    echo "==> pandoc found but no PDF engine; producing HTML instead"
-    HTML_OUT="${OUTPUT%.pdf}.html"
-    pandoc "$PROCESSED_MD" -o "$HTML_OUT" \
-      --standalone \
-      --toc \
-      -f markdown+implicit_figures
-    echo "==> HTML created (no PDF engine): $HTML_OUT"
-    echo "    Convert to PDF by opening in a browser and printing, or install xelatex/wkhtmltopdf."
-    ;;
+# Other fenced code blocks → <pre><code>
+/^```/ && !in_code {
+  in_code = 1
+  lang = $0
+  sub(/^```/, "", lang)
+  if (lang != "") {
+    printf "<pre><code class=\"language-%s\">", lang
+  } else {
+    printf "<pre><code>"
+  }
+  next
+}
+/^```$/ && in_code {
+  in_code = 0
+  print "</code></pre>"
+  next
+}
+in_code {
+  # Escape HTML inside code blocks
+  gsub(/&/, "\\&amp;")
+  gsub(/</, "\\&lt;")
+  gsub(/>/, "\\&gt;")
+  print
+  next
+}
 
-  wkhtmltopdf)
-    echo "==> Converting with wkhtmltopdf (no pandoc)"
-    # Convert MD to HTML manually (basic)
-    if command -v pandoc >/dev/null 2>&1; then
-      pandoc "$PROCESSED_MD" -o "$WORK_DIR/temp.html" --standalone
+# Headings
+/^######/ { sub(/^###### */, ""); printf "<h6>%s</h6>\n", $0; next }
+/^#####/  { sub(/^##### */,  ""); printf "<h5>%s</h5>\n", $0; next }
+/^####/   { sub(/^#### */,   ""); printf "<h4>%s</h4>\n", $0; next }
+/^###/    { sub(/^### */,    ""); printf "<h3>%s</h3>\n", $0; next }
+/^##/     { sub(/^## */,     ""); printf "<h2>%s</h2>\n", $0; next }
+/^#/      { sub(/^# */,      ""); printf "<h1>%s</h1>\n", $0; next }
+
+# Horizontal rules
+/^---+$/ || /^\*\*\*+$/ { print "<hr>"; next }
+
+# Tables (pass through — basic rendering)
+/^\|/ { print; next }
+
+# Blank lines
+/^$/ { print "<br>"; next }
+
+# Default: wrap in <p>
+{ printf "<p>%s</p>\n", $0 }
+' "$INPUT_ABS" > "$HTML_BODY_FILE"
+
+# Extract title from first H1 if present
+DOC_TITLE=$(grep -m1 '^# ' "$INPUT_ABS" | sed 's/^# //' || echo "Document")
+
+# Build self-contained HTML with Mermaid JS
+HTML_OUTPUT="$WORK_DIR/output.html"
+cat > "$HTML_OUTPUT" <<HTMLEOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${DOC_TITLE}</title>
+  <style>
+    @media print {
+      .mermaid svg { max-width: 100% !important; page-break-inside: avoid; }
+      body { font-size: 11pt; }
+      h1, h2, h3 { page-break-after: avoid; }
+      pre, table { page-break-inside: avoid; }
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2em;
+      color: #24292e;
+    }
+    h1 { font-size: 2em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+    h2 { font-size: 1.5em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+    h3 { font-size: 1.25em; }
+    pre {
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      padding: 16px;
+      overflow-x: auto;
+      font-size: 0.9em;
+    }
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.9em;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1em 0;
+    }
+    th, td {
+      border: 1px solid #dfe2e5;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th { background: #f6f8fa; font-weight: 600; }
+    tr:nth-child(even) { background: #f9f9f9; }
+    .mermaid {
+      text-align: center;
+      margin: 1.5em 0;
+      padding: 1em;
+      background: #fafbfc;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+    }
+    blockquote {
+      border-left: 4px solid #dfe2e5;
+      padding: 0 1em;
+      color: #6a737d;
+      margin: 1em 0;
+    }
+    hr { border: none; border-top: 1px solid #eaecef; margin: 2em 0; }
+    img { max-width: 100%; }
+  </style>
+</head>
+<body>
+HTMLEOF
+
+cat "$HTML_BODY_FILE" >> "$HTML_OUTPUT"
+
+# Use Mermaid JS from CDN with initialization
+cat >> "$HTML_OUTPUT" <<'HTMLEOF'
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'neutral',
+      securityLevel: 'loose',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+      flowchart: { useMaxWidth: true, htmlLabels: true },
+      sequence: { useMaxWidth: true },
+      themeVariables: {
+        fontSize: '14px',
+        lineColor: '#333333',
+        primaryColor: '#e8e8e8',
+        primaryTextColor: '#333333',
+        primaryBorderColor: '#666666'
+      }
+    });
+    // Signal rendering complete (used by puppeteer PDF path)
+    mermaid.run().then(() => {
+      document.body.setAttribute('data-mermaid-done', 'true');
+    });
+  </script>
+</body>
+</html>
+HTMLEOF
+
+echo "==> HTML generated with embedded Mermaid JS"
+
+# --- If pandoc is available, use it for better Markdown→HTML conversion --------
+# Rebuild the HTML body using pandoc (better table, list, and inline formatting support)
+# but keep our Mermaid JS wrapper intact.
+
+if [ "$HAS_PANDOC" = "true" ]; then
+  echo "==> Rebuilding body with pandoc for better formatting..."
+
+  # Convert mermaid blocks to placeholder divs before pandoc
+  PANDOC_INPUT="$WORK_DIR/pandoc-input.md"
+  awk '
+  BEGIN { in_mermaid = 0; count = 0 }
+  /^```mermaid/ {
+    in_mermaid = 1; count++
+    printf "<div class=\"mermaid\" id=\"mermaid-%d\">\n", count
+    next
+  }
+  in_mermaid && /^```$/ {
+    in_mermaid = 0
+    print "</div>"
+    next
+  }
+  { print }
+  ' "$INPUT_ABS" > "$PANDOC_INPUT"
+
+  PANDOC_BODY="$WORK_DIR/pandoc-body.html"
+  pandoc "$PANDOC_INPUT" -o "$PANDOC_BODY" \
+    -f markdown+pipe_tables+fenced_code_blocks+raw_html \
+    --no-highlight 2>/dev/null || true
+
+  if [ -f "$PANDOC_BODY" ] && [ -s "$PANDOC_BODY" ]; then
+    # Rebuild the full HTML: header + pandoc body + Mermaid JS footer
+    PANDOC_HTML="$WORK_DIR/pandoc-output.html"
+    head -n "$(grep -n '^<body>' "$HTML_OUTPUT" | tail -1 | cut -d: -f1)" "$HTML_OUTPUT" > "$PANDOC_HTML"
+    cat "$PANDOC_BODY" >> "$PANDOC_HTML"
+    # Append everything from </body> onward (the Mermaid JS script)
+    sed -n '/^  <script type="module">/,$ p' "$HTML_OUTPUT" >> "$PANDOC_HTML"
+    # Close the body and html tags are already in the script block
+    HTML_OUTPUT="$PANDOC_HTML"
+    echo "==> Pandoc formatting applied"
+  fi
+fi
+
+# --- Attempt PDF conversion via headless browser or puppeteer -----------------
+
+FINAL_OUTPUT="$OUTPUT"
+
+# Determine if we should try PDF output
+TRY_PDF=true
+if [ "$FORCE_HTML" = "true" ]; then
+  TRY_PDF=false
+fi
+if [[ "$OUTPUT" == *.html ]]; then
+  TRY_PDF=false
+fi
+
+if [ "$TRY_PDF" = "true" ]; then
+
+  PDF_CREATED=false
+
+  # Option 1: Headless Chromium/Chrome --print-to-pdf
+  if [ -n "$BROWSER_CMD" ] && [ "$PDF_CREATED" = "false" ]; then
+    echo "==> Converting to PDF via $BROWSER_CMD --headless --print-to-pdf"
+    if "$BROWSER_CMD" \
+      --headless \
+      --disable-gpu \
+      --no-sandbox \
+      --run-all-compositor-stages-before-draw \
+      --print-to-pdf="$FINAL_OUTPUT" \
+      --print-to-pdf-no-header \
+      "file://$HTML_OUTPUT" 2>/dev/null; then
+      PDF_CREATED=true
+      echo "==> PDF created: $FINAL_OUTPUT"
     else
-      # Minimal HTML wrapper
-      {
-        echo "<html><head><meta charset='utf-8'><style>body{font-family:sans-serif;margin:2em;} img{max-width:100%;} pre{background:#f5f5f5;padding:1em;overflow-x:auto;} code{font-family:monospace;}</style></head><body>"
-        cat "$PROCESSED_MD"
-        echo "</body></html>"
-      } > "$WORK_DIR/temp.html"
+      echo "==> WARN: Browser PDF conversion failed, trying next option..." >&2
     fi
-    wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT"
-    echo "==> PDF created: $OUTPUT"
-    ;;
+  fi
 
-  none)
-    echo "==> No PDF engine found. Saving processed Markdown with image references."
-    PROCESSED_OUT="${OUTPUT%.pdf}-processed.md"
-    cp "$PROCESSED_MD" "$PROCESSED_OUT"
+  # Option 2: Node.js + puppeteer (if available)
+  if [ "$HAS_NODE" = "true" ] && [ "$PDF_CREATED" = "false" ]; then
+    # Check if puppeteer is available
+    PUPPETEER_SCRIPT="$WORK_DIR/render-pdf.mjs"
+    cat > "$PUPPETEER_SCRIPT" <<'NODESCRIPT'
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
-    if [ "$DIAGRAM_COUNT" -gt 0 ] && [ "$HAS_MMDC" = "true" ]; then
-      # Also copy rendered images next to the processed markdown
-      IMG_DIR="$(dirname "$PROCESSED_OUT")/diagrams"
-      mkdir -p "$IMG_DIR"
-      cp "$WORK_DIR"/diagram-*.png "$IMG_DIR/" 2>/dev/null || true
-      echo "==> Images saved to: $IMG_DIR/"
+const htmlPath = process.argv[2];
+const pdfPath = process.argv[3];
+
+if (!htmlPath || !pdfPath) {
+  console.error('Usage: node render-pdf.mjs <input.html> <output.pdf>');
+  process.exit(1);
+}
+
+let puppeteer;
+try {
+  puppeteer = await import('puppeteer');
+} catch {
+  try {
+    puppeteer = await import('puppeteer-core');
+  } catch {
+    console.error('Neither puppeteer nor puppeteer-core is available.');
+    console.error('Install with: npm install -g puppeteer');
+    process.exit(2);
+  }
+}
+
+const browser = await puppeteer.default.launch({
+  headless: 'new',
+  args: ['--no-sandbox', '--disable-setuid-sandbox']
+});
+
+const page = await browser.newPage();
+const fileUrl = 'file://' + resolve(htmlPath);
+await page.goto(fileUrl, { waitUntil: 'networkidle0', timeout: 30000 });
+
+// Wait for Mermaid to finish rendering
+await page.waitForFunction(
+  () => document.body.getAttribute('data-mermaid-done') === 'true',
+  { timeout: 15000 }
+).catch(() => {
+  console.warn('WARN: Mermaid rendering may not have completed; proceeding anyway.');
+});
+
+// Small extra delay for SVG layout to settle
+await new Promise(r => setTimeout(r, 1000));
+
+await page.pdf({
+  path: resolve(pdfPath),
+  format: 'A4',
+  margin: { top: '1in', right: '1in', bottom: '1in', left: '1in' },
+  printBackground: true,
+  displayHeaderFooter: false
+});
+
+await browser.close();
+console.log('PDF created successfully.');
+NODESCRIPT
+
+    echo "==> Attempting PDF via Node.js + puppeteer..."
+    if node "$PUPPETEER_SCRIPT" "$HTML_OUTPUT" "$FINAL_OUTPUT" 2>/dev/null; then
+      PDF_CREATED=true
+      echo "==> PDF created: $FINAL_OUTPUT"
+    else
+      echo "==> WARN: Puppeteer not available or failed" >&2
     fi
+  fi
 
-    echo "==> Processed Markdown: $PROCESSED_OUT"
-    echo "    Install pandoc + xelatex or wkhtmltopdf to generate PDF."
-    ;;
-esac
+  # Option 3: wkhtmltopdf on the HTML file
+  if command -v wkhtmltopdf >/dev/null 2>&1 && [ "$PDF_CREATED" = "false" ]; then
+    echo "==> Converting to PDF via wkhtmltopdf"
+    # Note: wkhtmltopdf can't execute Mermaid JS, so diagrams may not render.
+    # But it's better than nothing for the non-Mermaid content.
+    echo "    WARN: wkhtmltopdf cannot execute JavaScript; Mermaid diagrams will appear as text." >&2
+    if wkhtmltopdf --enable-local-file-access --enable-javascript --javascript-delay 3000 \
+      "$HTML_OUTPUT" "$FINAL_OUTPUT" 2>/dev/null; then
+      PDF_CREATED=true
+      echo "==> PDF created (diagrams may be text): $FINAL_OUTPUT"
+    fi
+  fi
+
+  # Fallback: save the HTML file instead
+  if [ "$PDF_CREATED" = "false" ]; then
+    HTML_FALLBACK="${FINAL_OUTPUT%.pdf}.html"
+    cp "$HTML_OUTPUT" "$HTML_FALLBACK"
+    echo ""
+    echo "==> No PDF renderer available. Saved as HTML instead: $HTML_FALLBACK"
+    echo "    The HTML file contains live Mermaid diagrams that render in any browser."
+    echo ""
+    echo "    To get PDF, either:"
+    echo "    1. Open the HTML in a browser and print to PDF (Ctrl+P / Cmd+P)"
+    echo "    2. Install puppeteer: npm install -g puppeteer"
+    echo "    3. Install Chromium: apt install chromium-browser"
+    echo "    Then re-run this script."
+  fi
+
+else
+  # User requested HTML output
+  cp "$HTML_OUTPUT" "$FINAL_OUTPUT"
+  echo "==> HTML created: $FINAL_OUTPUT"
+  echo "    Open in any browser to view rendered Mermaid diagrams."
+fi
 
 echo "==> Done."
