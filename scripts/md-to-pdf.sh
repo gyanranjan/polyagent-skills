@@ -57,14 +57,100 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 INPUT_ABS="$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")"
 PROCESSED_MD="$WORK_DIR/processed.md"
+NORMALIZED_MD="$WORK_DIR/normalized.md"
 
 echo "==> Processing: $INPUT"
 echo "==> Output:     $OUTPUT_ABS"
 echo "==> Work dir:   $WORK_DIR"
 
+# --- Normalize input quirks ---------------------------------------------------
+# Handles:
+# 1) Legacy code block markers:
+#      [CODE BLOCK START: mermaid] ... [CODE BLOCK END]
+#    -> fenced Markdown
+# 2) Collapsed heading+list lines:
+#      ## Heading- item A- item B
+#    -> heading + bullet list lines
+awk '
+BEGIN {
+  sq = sprintf("%c", 39)
+  triple = sq sq sq
+}
+function trim(s) {
+  sub(/^[[:space:]]+/, "", s)
+  sub(/[[:space:]]+$/, "", s)
+  return s
+}
+
+{
+  line = $0
+  # Normalize smart quotes often introduced by copy/paste from docs/editors.
+  gsub(/[‘’]/, sq, line)
+  gsub(/[“”]/, "\"", line)
+
+  # Fix collapsed heading/list lines (outside fenced code):
+  # "## X- A- B" => "## X" + "- A" + "- B"
+  if (line ~ /^#{1,6}[[:space:]]+/ && line ~ /-[[:space:]]+/) {
+    d = match(line, /-[[:space:]]+/)
+    if (d > 0) {
+      heading = trim(substr(line, 1, d - 1))
+      tail = substr(line, d + RLENGTH)
+      if (length(heading) > 0 && length(trim(tail)) > 0) {
+        print heading
+        n = split(tail, items, /-[[:space:]]+/)
+        for (i = 1; i <= n; i++) {
+          item = trim(items[i])
+          if (length(item) > 0) {
+            print "- " item
+          }
+        }
+        next
+      }
+    }
+  }
+
+  if (line ~ /^[[:space:]]*\[CODE BLOCK START:[[:space:]]*mermaid[[:space:]]*\][[:space:]]*$/) {
+    print "```mermaid"
+    next
+  }
+  # Accept quote-style fences commonly seen from rich-text copy/paste.
+  trimmed = trim(line)
+  if (substr(trimmed, 1, 3) == triple) {
+    lang = trim(substr(trimmed, 4))
+    if (lang == "") {
+      print "```"
+      next
+    }
+    if (lang ~ /^[A-Za-z0-9_-]+$/) {
+      print "```" lang
+      next
+    }
+  }
+  if (line ~ /^[[:space:]]*\[CODE BLOCK START:[[:space:]]*[^]]+[[:space:]]*\][[:space:]]*$/) {
+    sub(/^[[:space:]]*\[CODE BLOCK START:[[:space:]]*/, "", line)
+    sub(/[[:space:]]*\][[:space:]]*$/, "", line)
+    print "```" line
+    next
+  }
+  if (line ~ /^[[:space:]]*\[CODE BLOCK START\][[:space:]]*$/) {
+    print "```"
+    next
+  }
+  if (line ~ /^[[:space:]]*\[CODE BLOCK END\][[:space:]]*$/) {
+    print "```"
+    next
+  }
+  print line
+}
+' "$INPUT_ABS" > "$NORMALIZED_MD"
+
+SOURCE_MD="$NORMALIZED_MD"
+MERMAID_BLOCK_COUNT=$(grep -c '^```mermaid' "$SOURCE_MD" || true)
+
 # --- Check tooling -----------------------------------------------------------
 
 HAS_MMDC=false
+MMDC_TIMEOUT_SECONDS="${MMDC_TIMEOUT_SECONDS:-90}"
 if command -v mmdc >/dev/null 2>&1; then
   HAS_MMDC=true
   MMDC_CMD="mmdc"
@@ -92,9 +178,14 @@ fi
 
 # Detect headless browser for HTML→PDF conversion
 BROWSER_CMD=""
+BROWSER_IS_SNAP=false
 for cmd in chromium chromium-browser google-chrome google-chrome-stable; do
   if command -v "$cmd" >/dev/null 2>&1; then
     BROWSER_CMD="$cmd"
+    browser_path="$(command -v "$cmd")"
+    if [[ "$browser_path" == /snap/* ]]; then
+      BROWSER_IS_SNAP=true
+    fi
     break
   fi
 done
@@ -117,16 +208,16 @@ fi
 
 # --- Decide which path to take -----------------------------------------------
 
-# Path A: mmdc pre-render (best quality, requires mmdc + PDF engine)
+# Path A: mmdc pre-render (best quality; preferred whenever mmdc is available)
 # Path B: HTML with Mermaid JS (no mmdc needed, renders in browser)
 
 USE_PATH="B"  # Default to HTML path
 if [ "$FORCE_HTML" = "true" ]; then
   USE_PATH="B"
   echo "==> Mode: HTML render (forced via --html)"
-elif [ "$HAS_MMDC" = "true" ] && [ "$PDF_ENGINE" != "none" ] && [ "$PDF_ENGINE" != "pandoc-noengine" ]; then
+elif [ "$HAS_MMDC" = "true" ]; then
   USE_PATH="A"
-  echo "==> Mode: Path A — mmdc pre-render + $PDF_ENGINE"
+  echo "==> Mode: Path A — mmdc pre-render (preferred)"
 else
   echo "==> Mode: Path B — HTML with Mermaid JS (browser-rendered)"
 fi
@@ -179,7 +270,7 @@ PCONF
     next
   }
   { print }
-  ' "$INPUT_ABS" > "$PROCESSED_MD"
+  ' "$SOURCE_MD" > "$PROCESSED_MD"
 
   DIAGRAM_COUNT=$(find "$WORK_DIR" -name 'diagram-*.mmd' 2>/dev/null | wc -l)
   echo "==> Found $DIAGRAM_COUNT Mermaid diagram(s)"
@@ -190,18 +281,23 @@ PCONF
       base="$(basename "$mmd_file" .mmd)"
       png_file="$WORK_DIR/${base}.png"
       echo "    Rendering: $base"
-      if $MMDC_CMD \
-        -i "$mmd_file" \
-        -o "$png_file" \
-        -c "$MERMAID_CONFIG" \
-        -p "$PUPPETEER_CONFIG" \
-        -w 1200 \
-        -H 800 \
-        -s 2 \
-        -b white 2>/dev/null; then
+      if command -v timeout >/dev/null 2>&1; then
+        MMDC_RUNNER=(timeout "${MMDC_TIMEOUT_SECONDS}s")
+      else
+        MMDC_RUNNER=()
+      fi
+      if "${MMDC_RUNNER[@]}" $MMDC_CMD \
+          -i "$mmd_file" \
+          -o "$png_file" \
+          -c "$MERMAID_CONFIG" \
+          -p "$PUPPETEER_CONFIG" \
+          -w 1200 \
+          -H 800 \
+          -s 2 \
+          -b white 2>/dev/null; then
         echo "    OK: $png_file"
       else
-        echo "    WARN: mmdc failed for $base, falling back to placeholder" >&2
+        echo "    WARN: mmdc failed/timed out for $base, falling back to placeholder" >&2
         sed -i "s|!\[Diagram ${base#diagram-}\](${base}.png)|> **[Diagram ${base#diagram-}]** — Rendering failed. See source Markdown for Mermaid code.|" "$PROCESSED_MD"
       fi
     done
@@ -222,6 +318,8 @@ PCONF
         --toc \
         -f markdown+implicit_figures
       echo "==> PDF created: $OUTPUT_ABS"
+      echo "==> Done."
+      exit 0
       ;;
     pandoc-weasyprint)
       echo "==> Converting with pandoc + weasyprint"
@@ -230,6 +328,8 @@ PCONF
         --toc \
         -f markdown+implicit_figures
       echo "==> PDF created: $OUTPUT_ABS"
+      echo "==> Done."
+      exit 0
       ;;
     pandoc-html-wkhtmltopdf)
       echo "==> Converting via pandoc (HTML) + wkhtmltopdf"
@@ -237,6 +337,8 @@ PCONF
         --standalone --toc -f markdown+implicit_figures
       wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT_ABS"
       echo "==> PDF created: $OUTPUT_ABS"
+      echo "==> Done."
+      exit 0
       ;;
     wkhtmltopdf)
       echo "==> Converting with wkhtmltopdf"
@@ -251,15 +353,21 @@ PCONF
       fi
       wkhtmltopdf --enable-local-file-access "$WORK_DIR/temp.html" "$OUTPUT_ABS"
       echo "==> PDF created: $OUTPUT_ABS"
+      echo "==> Done."
+      exit 0
+      ;;
+    *)
+      echo "==> No direct PDF engine found after mmdc pre-render."
+      echo "==> Falling back to HTML/PDF conversion path with pre-rendered diagrams."
+      # Keep pre-rendered Markdown as source for Path B rendering/fallback.
+      SOURCE_MD="$PROCESSED_MD"
+      MERMAID_BLOCK_COUNT=$(grep -c '^```mermaid' "$SOURCE_MD" || true)
       ;;
   esac
-
-  echo "==> Done."
-  exit 0
 fi
 
 # ==============================================================================
-# PATH B: HTML render with Mermaid JS (no mmdc needed)
+# PATH B: HTML render with Mermaid JS (or pre-rendered image Markdown fallback)
 # ==============================================================================
 
 echo "==> Generating self-contained HTML with Mermaid JS..."
@@ -269,10 +377,18 @@ echo "==> Generating self-contained HTML with Mermaid JS..."
 HTML_BODY_FILE="$WORK_DIR/body.html"
 
 awk '
-BEGIN { in_mermaid = 0; in_code = 0 }
+BEGIN { in_mermaid = 0; in_code = 0; in_list = 0 }
+
+function close_list_if_open() {
+  if (in_list) {
+    print "</ul>"
+    in_list = 0
+  }
+}
 
 # Mermaid fenced blocks → <div class="mermaid">
 /^```mermaid/ {
+  close_list_if_open()
   in_mermaid = 1
   print "<div class=\"mermaid\">"
   next
@@ -286,6 +402,7 @@ in_mermaid { print; next }
 
 # Other fenced code blocks → <pre><code>
 /^```/ && !in_code {
+  close_list_if_open()
   in_code = 1
   lang = $0
   sub(/^```/, "", lang)
@@ -311,28 +428,61 @@ in_code {
 }
 
 # Headings
-/^######/ { sub(/^###### */, ""); printf "<h6>%s</h6>\n", $0; next }
-/^#####/  { sub(/^##### */,  ""); printf "<h5>%s</h5>\n", $0; next }
-/^####/   { sub(/^#### */,   ""); printf "<h4>%s</h4>\n", $0; next }
-/^###/    { sub(/^### */,    ""); printf "<h3>%s</h3>\n", $0; next }
-/^##/     { sub(/^## */,     ""); printf "<h2>%s</h2>\n", $0; next }
-/^#/      { sub(/^# */,      ""); printf "<h1>%s</h1>\n", $0; next }
+/^######/ { close_list_if_open(); sub(/^###### */, ""); printf "<h6>%s</h6>\n", $0; next }
+/^#####/  { close_list_if_open(); sub(/^##### */,  ""); printf "<h5>%s</h5>\n", $0; next }
+/^####/   { close_list_if_open(); sub(/^#### */,   ""); printf "<h4>%s</h4>\n", $0; next }
+/^###/    { close_list_if_open(); sub(/^### */,    ""); printf "<h3>%s</h3>\n", $0; next }
+/^##/     { close_list_if_open(); sub(/^## */,     ""); printf "<h2>%s</h2>\n", $0; next }
+/^#/      { close_list_if_open(); sub(/^# */,      ""); printf "<h1>%s</h1>\n", $0; next }
 
 # Horizontal rules
-/^---+$/ || /^\*\*\*+$/ { print "<hr>"; next }
+/^---+$/ || /^\*\*\*+$/ { close_list_if_open(); print "<hr>"; next }
 
 # Tables (pass through — basic rendering)
-/^\|/ { print; next }
+/^\|/ { close_list_if_open(); print; next }
+
+# Markdown image: ![alt](url)
+/^!\[[^]]*\]\([^)]*\)[[:space:]]*$/ {
+  close_list_if_open()
+  line = $0
+  alt = line
+  sub(/^!\[/, "", alt)
+  sub(/\][[:space:]]*\(.*/, "", alt)
+  src = line
+  sub(/^!\[[^]]*\][[:space:]]*\(/, "", src)
+  sub(/\)[[:space:]]*$/, "", src)
+  printf "<p><img alt=\"%s\" src=\"%s\"></p>\n", alt, src
+  next
+}
+
+# Unordered list
+/^-[[:space:]]+/ {
+  if (!in_list) {
+    print "<ul>"
+    in_list = 1
+  }
+  item = $0
+  sub(/^-[[:space:]]+/, "", item)
+  printf "<li>%s</li>\n", item
+  next
+}
 
 # Blank lines
-/^$/ { print "<br>"; next }
+/^$/ { close_list_if_open(); print "<br>"; next }
 
 # Default: wrap in <p>
-{ printf "<p>%s</p>\n", $0 }
-' "$INPUT_ABS" > "$HTML_BODY_FILE"
+{
+  close_list_if_open()
+  printf "<p>%s</p>\n", $0
+}
+
+END {
+  close_list_if_open()
+}
+' "$SOURCE_MD" > "$HTML_BODY_FILE"
 
 # Extract title from first H1 if present
-DOC_TITLE=$(grep -m1 '^# ' "$INPUT_ABS" | sed 's/^# //' || echo "Document")
+DOC_TITLE=$(grep -m1 '^# ' "$SOURCE_MD" | sed 's/^# //' || echo "Document")
 
 # Build self-contained HTML with Mermaid JS
 HTML_OUTPUT="$WORK_DIR/output.html"
@@ -460,7 +610,7 @@ if [ "$HAS_PANDOC" = "true" ]; then
     next
   }
   { print }
-  ' "$INPUT_ABS" > "$PANDOC_INPUT"
+  ' "$SOURCE_MD" > "$PANDOC_INPUT"
 
   PANDOC_BODY="$WORK_DIR/pandoc-body.html"
   pandoc "$PANDOC_INPUT" -o "$PANDOC_BODY" \
@@ -497,26 +647,11 @@ if [ "$TRY_PDF" = "true" ]; then
 
   PDF_CREATED=false
 
-  # Option 1: Headless Chromium/Chrome --print-to-pdf
-  if [ -n "$BROWSER_CMD" ] && [ "$PDF_CREATED" = "false" ]; then
-    echo "==> Converting to PDF via $BROWSER_CMD --headless --print-to-pdf"
-    if "$BROWSER_CMD" \
-      --headless \
-      --disable-gpu \
-      --no-sandbox \
-      --run-all-compositor-stages-before-draw \
-      --virtual-time-budget=15000 \
-      --print-to-pdf="$FINAL_OUTPUT" \
-      --print-to-pdf-no-header \
-      "file://$HTML_OUTPUT" 2>/dev/null; then
-      PDF_CREATED=true
-      echo "==> PDF created: $FINAL_OUTPUT"
-    else
-      echo "==> WARN: Browser PDF conversion failed, trying next option..." >&2
-    fi
+  if [ "$MERMAID_BLOCK_COUNT" -gt 0 ]; then
+    echo "==> Mermaid blocks detected: $MERMAID_BLOCK_COUNT"
   fi
 
-  # Option 2: Node.js + puppeteer (if available)
+  # Option 1: Node.js + puppeteer (if available) with Mermaid render validation
   if [ "$HAS_NODE" = "true" ] && [ "$PDF_CREATED" = "false" ]; then
     # Check if puppeteer is available
     PUPPETEER_SCRIPT="$WORK_DIR/render-pdf.mjs"
@@ -526,9 +661,10 @@ import { resolve } from 'path';
 
 const htmlPath = process.argv[2];
 const pdfPath = process.argv[3];
+const expectedMermaidCount = Number(process.argv[4] || 0);
 
 if (!htmlPath || !pdfPath) {
-  console.error('Usage: node render-pdf.mjs <input.html> <output.pdf>');
+  console.error('Usage: node render-pdf.mjs <input.html> <output.pdf> [expectedMermaidCount]');
   process.exit(1);
 }
 
@@ -565,6 +701,17 @@ await page.waitForFunction(
 // Small extra delay for SVG layout to settle
 await new Promise(r => setTimeout(r, 1000));
 
+if (expectedMermaidCount > 0) {
+  const renderedCount = await page.$$eval('.mermaid svg', (els) => els.length);
+  if (renderedCount < expectedMermaidCount) {
+    console.error(
+      `Mermaid render validation failed: expected ${expectedMermaidCount}, rendered ${renderedCount}.`
+    );
+    await browser.close();
+    process.exit(3);
+  }
+}
+
 await page.pdf({
   path: resolve(pdfPath),
   format: 'A4',
@@ -578,11 +725,38 @@ console.log('PDF created successfully.');
 NODESCRIPT
 
     echo "==> Attempting PDF via Node.js + puppeteer..."
-    if node "$PUPPETEER_SCRIPT" "$HTML_OUTPUT" "$FINAL_OUTPUT" 2>/dev/null; then
+    if node "$PUPPETEER_SCRIPT" "$HTML_OUTPUT" "$FINAL_OUTPUT" "$MERMAID_BLOCK_COUNT" 2>/dev/null; then
       PDF_CREATED=true
       echo "==> PDF created: $FINAL_OUTPUT"
     else
-      echo "==> WARN: Puppeteer not available or failed" >&2
+      echo "==> WARN: Puppeteer not available or Mermaid validation failed" >&2
+    fi
+  fi
+
+  # Option 2: Headless Chromium/Chrome --print-to-pdf
+  if [ -n "$BROWSER_CMD" ] && [ "$PDF_CREATED" = "false" ]; then
+    if [ "$BROWSER_IS_SNAP" = "true" ]; then
+      echo "==> WARN: $BROWSER_CMD is a Snap build; headless PDF may fail in restricted environments." >&2
+      echo "    Skipping browser conversion attempt. Prefer puppeteer or manual browser print from HTML." >&2
+    else
+    echo "==> Converting to PDF via $BROWSER_CMD --headless --print-to-pdf"
+    if [ "$MERMAID_BLOCK_COUNT" -gt 0 ]; then
+      echo "    WARN: Browser mode cannot validate Mermaid render completeness." >&2
+    fi
+    if "$BROWSER_CMD" \
+      --headless \
+      --disable-gpu \
+      --no-sandbox \
+      --run-all-compositor-stages-before-draw \
+      --virtual-time-budget=15000 \
+      --print-to-pdf="$FINAL_OUTPUT" \
+      --print-to-pdf-no-header \
+      "file://$HTML_OUTPUT" 2>/dev/null; then
+      PDF_CREATED=true
+      echo "==> PDF created: $FINAL_OUTPUT"
+    else
+      echo "==> WARN: Browser PDF conversion failed, trying next option..." >&2
+    fi
     fi
   fi
 
@@ -610,7 +784,7 @@ NODESCRIPT
     echo "    To get PDF, either:"
     echo "    1. Open the HTML in a browser and print to PDF (Ctrl+P / Cmd+P)"
     echo "    2. Install puppeteer: npm install -g puppeteer"
-    echo "    3. Install Chromium: apt install chromium-browser"
+    echo "    3. Install a non-Snap Chromium/Chrome build with headless PDF support"
     echo "    Then re-run this script."
   fi
 

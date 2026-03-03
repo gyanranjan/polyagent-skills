@@ -16,9 +16,22 @@ Apply these guidelines when:
 - The user asks to export a document to PDF
 - Any document with `mermaid` codeblocks needs to become a PDF
 
-## Strategy
+## Default Workflow (Mandatory)
 
-The script `scripts/md-to-pdf.sh` auto-selects the best available approach:
+Use `scripts/md-to-pdf.sh` as the canonical/default path for all Mermaid-to-PDF export.
+Do not create ad-hoc per-project converters unless explicitly requested.
+
+The script auto-selects the best available approach with this precedence:
+
+1. **Path A (Preferred):** `mmdc` pre-render Mermaid blocks to images, then convert
+2. **Path B:** HTML render path (Mermaid JS) with automated PDF conversion where available
+3. **Fallback:** HTML artifact for manual browser print-to-PDF
+
+This keeps one reliable implementation in the repository and avoids drift.
+
+## Strategy Details
+
+`scripts/md-to-pdf.sh` uses:
 
 ### Path A: Pre-Render Then Convert (Best Quality)
 
@@ -75,7 +88,7 @@ When writing Mermaid diagrams that will be exported to PDF, follow these rules:
 
 ## Conversion Process
 
-### Option A: Automated Script (`scripts/md-to-pdf.sh`) — Recommended
+### Option A: Automated Script (`scripts/md-to-pdf.sh`) — Required Default
 
 ```bash
 # Auto-selects best path (A or B) based on available tools
@@ -89,6 +102,15 @@ When writing Mermaid diagrams that will be exported to PDF, follow these rules:
 # - Chromium/puppeteer?    → Path B (HTML → headless browser → PDF)
 # - Nothing available?     → Fallback (HTML with live Mermaid for browser viewing)
 ```
+
+### Sandbox/Permission Guidance
+
+If headless browser conversion fails in a sandboxed environment (common with Snap Chromium), rerun conversion with elevated permissions in the execution environment. Keep the command unchanged; only permission level should change.
+
+If automation remains blocked:
+1. Generate HTML via `--html`
+2. Open locally in a browser
+3. Print to PDF manually
 
 ### Option B: Manual Steps (Path A)
 
@@ -214,6 +236,7 @@ Save as `mermaid-pdf-config.json` and use: `mmdc -i input.mmd -o output.svg -c m
 | Diagram is blurry in PDF | PNG at low resolution | Use SVG instead, or PNG with `-s 2` or higher |
 | Diagram labels are clipped/overlapping | Labels too long or too many nodes | Shorten labels to < 40 chars, split diagram |
 | mmdc hangs or crashes | Chromium sandbox issue in container/CI | Use `mmdc --puppeteerConfigFile` with `{"args": ["--no-sandbox"]}` |
+| mmdc render stalls for too long | npx/tooling latency or blocked Chromium | Set `MMDC_TIMEOUT_SECONDS` (e.g. `MMDC_TIMEOUT_SECONDS=60 ./scripts/md-to-pdf.sh ...`) |
 | Diagram renders but colors are too dark | Dark theme used | Use `-t neutral` or custom config above |
 | SVG not rendering in pandoc PDF | xelatex doesn't embed SVG natively | Convert SVG to PNG first: `inkscape -d 300 diagram.svg -o diagram.png`, or use `--pdf-engine=weasyprint` |
 

@@ -12,6 +12,17 @@ Read `common-skills/development-lifecycle-gates.md`. The gates are:
 
 Gates are mandatory by default. Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Skip only if the user explicitly asks.
 
+## Operating Expectations (Mandatory)
+
+1. Act as an expert partner: challenge weak assumptions and suggest stronger options.
+2. Ask 2-4 high-value, decision-oriented questions at each gate transition.
+3. In every substantive response, include:
+   - `Stage: Gx <name>`
+   - `Next: <immediate next step>`
+4. For requirements/design deliverables, include in-block Mermaid diagrams by default.
+5. Generate a shareable PDF for requirements/design docs by default unless the user opts out.
+6. Keep `agent.todo.md` workflow snapshot and gate evidence updated as work progresses.
+
 ## When you receive a task:
 
 1. Check `agent.todo.md` for gate status (build tasks follow gates)
@@ -34,6 +45,7 @@ Gates are mandatory by default. Check `agent.todo.md` for gate status. Start at 
 - `skills/agent-writer/` — Write new agent/skill definitions
 - `skills/desensitizer/` — Anonymize and mask sensitive data
 - `skills/remote-ops/` — Deployment, infrastructure, and operations management
+- `skills/expert-research/` — Expert deep analysis and decision support for high-stakes/ambiguous topics
 
 ## Common Skills
 
@@ -43,3 +55,12 @@ Gates are mandatory by default. Check `agent.todo.md` for gate status. Start at 
 - `common-skills/document-tail-sections.md` — Standard document endings
 - `common-skills/output-formatting.md` — Formatting conventions
 - `common-skills/quality-checklist.md` — Pre-delivery quality gates
+
+## Pre-PR Quality Gate (Required)
+
+Before opening or merging any PR, run:
+
+```bash
+./scripts/gate-status-check.sh agent.todo.md
+./scripts/design-readiness-check.sh --allow-open skills/requirement-study/references/requirement-template.md docs/specs/SPEC_TEMPLATE.md
+```

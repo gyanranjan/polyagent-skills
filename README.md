@@ -136,6 +136,7 @@ This copies adapters plus `skills/` and `common-skills/` into that specific proj
 | [agent-writer](skills/agent-writer/) | Write new agent definitions | ✅ Active |
 | [desensitizer](skills/desensitizer/) | Data desensitization and anonymization | ✅ Active |
 | [remote-ops](skills/remote-ops/) | Remote operations and infra management | ✅ Active |
+| [expert-research](skills/expert-research/) | Deep expert analysis and recommendation support | ✅ Active |
 
 ## Repo Structure
 
@@ -183,7 +184,8 @@ polyagent-skills/
 │   ├── repo-bootstrap/
 │   ├── agent-writer/
 │   ├── desensitizer/
-│   └── remote-ops/
+│   ├── remote-ops/
+│   └── expert-research/
 │
 ├── adapters/                  # Thin agent-specific wrappers
 │   ├── claude-code/
@@ -250,7 +252,7 @@ polyagent-skills/
 # Create GitHub issue stubs from REQ IDs
 ./scripts/init-requirement-issues.sh path/to/requirements.md org/repo
 
-# Convert Markdown with Mermaid diagrams to PDF (pre-renders diagrams)
+# Convert Markdown with Mermaid diagrams to PDF (auto-selects render path; falls back to HTML when needed)
 ./scripts/md-to-pdf.sh path/to/document.md output.pdf
 ```
 

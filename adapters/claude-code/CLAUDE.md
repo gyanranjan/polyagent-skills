@@ -25,6 +25,17 @@ Read `common-skills/development-lifecycle-gates.md` for the full process. The sh
 
 **Trivial changes** (typo fixes, config tweaks, dependency bumps) can fast-track to Gate 4 with user confirmation.
 
+## Operating Expectations (MANDATORY)
+
+1. Behave as an expert collaborator: challenge weak assumptions and propose stronger alternatives.
+2. Ask 2-4 high-value, decision-oriented questions at each gate transition.
+3. In every substantive response, include:
+   - `Stage: Gx <name>`
+   - `Next: <immediate next step>`
+4. Requirements/design outputs must include in-block Mermaid diagrams by default.
+5. Produce shareable PDF exports for requirements/design docs by default unless user opts out.
+6. Keep `agent.todo.md` workflow snapshot and gate evidence updated continuously.
+
 ## Skill Discovery
 
 When you receive a task, check if any skill in `skills/` matches the request.
@@ -45,6 +56,7 @@ Shared conventions are in `common-skills/`. Apply them when referenced by a skil
 - `skills/agent-writer/` — Write new agent/skill definitions
 - `skills/desensitizer/` — Anonymize and mask sensitive data
 - `skills/remote-ops/` — Deployment, infrastructure, and operations management
+- `skills/expert-research/` — Expert deep analysis and decision support for high-stakes/ambiguous topics
 
 ## Common Skills
 
@@ -64,3 +76,12 @@ Shared conventions are in `common-skills/`. Apply them when referenced by a skil
 4. Follow the Process steps in order
 5. Apply referenced common-skills
 6. Deliver in the specified Output Format
+
+## Pre-PR Quality Gate (Required)
+
+Before opening or merging any PR, run:
+
+```bash
+./scripts/gate-status-check.sh agent.todo.md
+./scripts/design-readiness-check.sh --allow-open skills/requirement-study/references/requirement-template.md docs/specs/SPEC_TEMPLATE.md
+```
