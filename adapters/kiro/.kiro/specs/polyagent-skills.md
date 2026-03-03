@@ -63,6 +63,5 @@ Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Sk
 Before opening or merging any PR, run:
 
 ```bash
-./scripts/gate-status-check.sh agent.todo.md
-./scripts/design-readiness-check.sh --allow-open skills/requirement-study/references/requirement-template.md docs/specs/SPEC_TEMPLATE.md
+./scripts/polyagentctl.py check --strict --project .
 ```
