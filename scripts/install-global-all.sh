@@ -1,5 +1,5 @@
 #!/bin/bash
-# install-global-all.sh - One-time global install for Codex, Kiro, Gemini, OpenClaw
+# install-global-all.sh - One-time global install for Claude Code, Codex, Kiro, Gemini, OpenClaw
 #
 # Usage:
 #   ./scripts/install-global-all.sh [copy|link]
@@ -40,9 +40,148 @@ MANAGED_TAG="install-global-all.sh"
 # shellcheck source=lib-common.sh
 source "$SCRIPT_DIR/lib-common.sh"
 
-mkdir -p "$GLOBAL_ROOT" "$OPENCLAW_HOME" "$HOME/.codex" "$HOME/.kiro/specs" "$HOME/.gemini"
+mkdir -p "$GLOBAL_ROOT" "$OPENCLAW_HOME" "$HOME/.claude" "$HOME/.codex" "$HOME/.kiro/specs" "$HOME/.gemini"
 mkdir -p "$(dirname "$MANIFEST_FILE")"
 printf "# polyagent global install manifest\n# format: <path>\\t<kind>\\t<tag>\n" > "$MANIFEST_FILE"
+
+        fi
+        safe_name="${path#/}"
+        safe_name="${safe_name//\//__}"
+        target="$BACKUP_DIR/$safe_name"
+        mv "$path" "$target"
+        echo "  Backed up: $path -> $target"
+    fi
+}
+
+extract_skill_name() {
+    local src="$1"
+    sed -n 's/^name:[[:space:]]*//p' "$src" | head -n 1
+}
+
+extract_skill_description() {
+    local src="$1"
+    awk '
+BEGIN{fm=0;seen=0;block=0;desc=""}
+/^---$/{
+  if(!seen){seen=1;fm=1;next}
+  if(fm){fm=0;exit}
+}
+fm{
+  if($0 ~ /^description:[[:space:]]*>/){block=1;next}
+  if(block){
+    if($0 ~ /^[A-Za-z0-9_-]+:[[:space:]]*/){block=0}
+    else{
+      line=$0
+      sub(/^[[:space:]]+/, "", line)
+      if(line!="") desc=desc line " "
+      next
+    }
+  }
+  if($0 ~ /^description:[[:space:]]*/){
+    line=$0
+    sub(/^description:[[:space:]]*/, "", line)
+    desc=line
+  }
+}
+END{
+  gsub(/[[:space:]]+$/, "", desc)
+  print desc
+}' "$src"
+}
+
+extract_skill_body() {
+    local src="$1"
+    awk '
+BEGIN{fm=0;seen=0}
+NR==1 && $0=="---"{seen=1;fm=1;next}
+fm && $0=="---"{fm=0;next}
+!fm{print}
+' "$src"
+}
+
+normalize_skill_markdown() {
+    local src="$1"
+    local dst="$2"
+    local fallback_name="$3"
+    local name description body esc_description
+
+    name="$(extract_skill_name "$src")"
+    if [ -z "$name" ]; then
+        name="$fallback_name"
+    fi
+
+    description="$(extract_skill_description "$src")"
+    if [ -z "$description" ]; then
+        description="Portable polyagent skill: $name"
+    fi
+
+    body="$(extract_skill_body "$src")"
+    esc_description="${description//\\/\\\\}"
+    esc_description="${esc_description//\"/\\\"}"
+
+    {
+        echo "---"
+        echo "name: $name"
+        echo "description: \"$esc_description\""
+        echo "---"
+        echo ""
+        printf "%s\n" "$body"
+    } > "$dst"
+}
+
+install_normalized_skills_copy() {
+    local source_skills="$1"
+    local source_common="$2"
+    local target_skills="$3"
+    local target_common="$4"
+    local skill_name src_dir dst_dir
+
+    backup_if_exists "$target_skills"
+    mkdir -p "$target_skills"
+    mark_dir_managed "$target_skills"
+    record_manifest "$target_skills" "dir"
+
+    for src_dir in "$source_skills"/*; do
+        [ -d "$src_dir" ] || continue
+        skill_name="$(basename "$src_dir")"
+        dst_dir="$target_skills/$skill_name"
+        mkdir -p "$dst_dir"
+        cp -a "$src_dir/." "$dst_dir/"
+        if [ -f "$src_dir/SKILL.md" ]; then
+            normalize_skill_markdown "$src_dir/SKILL.md" "$dst_dir/SKILL.md" "$skill_name"
+        fi
+        echo "  Installed skill: $skill_name -> $target_skills"
+    done
+
+    backup_if_exists "$target_common"
+    mkdir -p "$target_common"
+    cp -a "$source_common/." "$target_common/"
+    mark_dir_managed "$target_common"
+    record_manifest "$target_common" "dir"
+    echo "  Installed common skills -> $target_common"
+}
+
+write_claude_global_instructions() {
+    local path="$HOME/.claude/CLAUDE.md"
+    backup_if_exists "$path"
+    cat > "$path" <<EOF
+<!-- $MANAGED_MARKER_KEY: $MANAGED_TAG -->
+# Agent Instructions - polyagent-skills (global)
+
+You have access to a portable skill library in:
+- \`$GLOBAL_SKILLS_DIR\`
+- \`$GLOBAL_COMMON_DIR\`
+
+When you receive a task:
+1. Check \`$GLOBAL_SKILLS_DIR\` for a matching skill by reading each SKILL.md description.
+2. Read the full SKILL.md for the matched skill.
+3. Follow its Process steps in order.
+4. Apply referenced common-skills from \`$GLOBAL_COMMON_DIR\`.
+5. Deliver in the specified Output Format.
+EOF
+    record_manifest "$path" "file"
+    echo "  Wrote Claude Code global config: $path"
+}
 
 write_codex_global_instructions() {
     local path="$HOME/.codex/AGENTS.md"
@@ -224,6 +363,7 @@ install_normalized_skills_copy "$REPO_DIR/skills" "$REPO_DIR/common-skills" "$OP
 echo ""
 echo "Writing global agent configs..."
 echo "  (Existing config files will be backed up before replacement.)"
+write_claude_global_instructions
 write_codex_global_instructions
 write_kiro_global_instructions
 write_gemini_global_instructions

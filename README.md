@@ -46,7 +46,7 @@ Every AI coding agent has its own way of consuming instructions — `CLAUDE.md`,
 git clone https://github.com/gyanranjan/polyagent-skills.git
 cd polyagent-skills
 
-# One-time global install (Codex + Kiro + Gemini + OpenClaw)
+# One-time global install (Claude Code + Codex + Kiro + Gemini + OpenClaw)
 ./scripts/install-global-all.sh copy
 
 # Project install (kept for per-repo adapters)
@@ -99,6 +99,7 @@ Key controls before coding:
 This installs:
 
 - Shared global library: `~/.polyagent-skills/skills` and `~/.polyagent-skills/common-skills`
+- Global Claude Code instructions: `~/.claude/CLAUDE.md`
 - Global Codex instructions: `~/.codex/AGENTS.md`
 - Global Kiro instructions: `~/.kiro/specs/polyagent-skills.md`
 - Global Gemini instructions: `~/.gemini/instructions.md`
@@ -147,6 +148,27 @@ This copies adapters plus `skills/` and `common-skills/` into that specific proj
 | [desensitizer](skills/desensitizer/) | Data desensitization and anonymization | ✅ Active |
 | [remote-ops](skills/remote-ops/) | Remote operations and infra management | ✅ Active |
 | [expert-research](skills/expert-research/) | Deep expert analysis and recommendation support | ✅ Active |
+| [context-orchestrator](skills/context-orchestrator/) | Build reusable project context packs and session handoffs | ✅ Active |
+| [automation-architect](skills/automation-architect/) | Design automation pipelines, CI/CD systems, and workflow automation | ✅ Active |
+| [business-strategist](skills/business-strategist/) | Market positioning, business model design, and competitive strategy | ✅ Active |
+| [customer-advocate](skills/customer-advocate/) | Deep user empathy and voice-of-customer for product decisions | ✅ Active |
+| [devils-advocate](skills/devils-advocate/) | Stress-test decisions and plans by arguing the opposing case | ✅ Active |
+| [engineering-team](skills/engineering-team/) | Translate specs into engineering tasks, plans, and code scaffolds | ✅ Active |
+| [entrepreneur](skills/entrepreneur/) | Opportunity-first thinking, value propositions, and business outcomes | ✅ Active |
+| [growth-engineer](skills/growth-engineer/) | Acquisition, activation, retention, and referral growth systems | ✅ Active |
+| [historian-knowledge-curator](skills/historian-knowledge-curator/) | Organizational memory, decisions, and learnings capture | ✅ Active |
+| [ideator](skills/ideator/) | Divergent idea generation and creative lateral thinking | ✅ Active |
+| [operations-commander](skills/operations-commander/) | Production readiness, deployment, runbooks, and incident response | ✅ Active |
+| [poc-spike](skills/poc-spike/) | Proof-of-concept spikes to de-risk technical unknowns | ✅ Active |
+| [product-manager](skills/product-manager/) | Product spec, feature prioritization, and outcome-driven decisions | ✅ Active |
+| [qa-validator](skills/qa-validator/) | Test strategies, acceptance criteria, and pre-delivery validation | ✅ Active |
+| [research-analyst](skills/research-analyst/) | Deep research, evidence synthesis, and confidence-aware findings | ✅ Active |
+| [role-orchestrator](skills/role-orchestrator/) | Classify tasks, select roles, manage handoffs across multi-agent workflows | ✅ Active |
+| [security-guardian](skills/security-guardian/) | Threat modeling, vulnerability review, and secure design validation | ✅ Active |
+| [subject-matter-expert](skills/subject-matter-expert/) | Parameterizable deep domain expert (e.g. SME Kubernetes, SME Finance) | ✅ Active |
+| [systems-architect](skills/systems-architect/) | Scalable system design, architecture decisions, and trade-off analysis | ✅ Active |
+| [systems-simplifier](skills/systems-simplifier/) | Identify and eliminate unnecessary complexity and over-engineering | ✅ Active |
+| [visionary-futurist](skills/visionary-futurist/) | Long-horizon technology trajectories and second-order consequences | ✅ Active |
 
 ## Repo Structure
 
@@ -169,7 +191,8 @@ polyagent-skills/
 │   │   ├── 002-three-layer-architecture.md
 │   │   ├── 003-adapter-pattern.md
 │   │   ├── 004-mcp-for-tool-skills.md
-│   │   └── 005-workflow-orchestration-and-session-todo.md
+│   │   ├── 005-workflow-orchestration-and-session-todo.md
+│   │   └── 006-gated-development-lifecycle.md
 │   ├── rca/                   # Root Cause Analysis templates and docs
 │   │   └── RCA_TEMPLATE.md
 │   └── rfcs/                  # Proposals for significant changes
@@ -188,6 +211,7 @@ polyagent-skills/
 │   ├── idea-to-mvp/
 │   ├── requirement-study/
 │   ├── implementation-sketch/
+│   ├── poc-spike/
 │   ├── mail-summarizer/
 │   ├── document-analyzer/
 │   ├── deck-creator/
@@ -195,7 +219,27 @@ polyagent-skills/
 │   ├── agent-writer/
 │   ├── desensitizer/
 │   ├── remote-ops/
-│   └── expert-research/
+│   ├── expert-research/
+│   ├── context-orchestrator/
+│   ├── automation-architect/
+│   ├── business-strategist/
+│   ├── customer-advocate/
+│   ├── devils-advocate/
+│   ├── engineering-team/
+│   ├── entrepreneur/
+│   ├── growth-engineer/
+│   ├── historian-knowledge-curator/
+│   ├── ideator/
+│   ├── operations-commander/
+│   ├── product-manager/
+│   ├── qa-validator/
+│   ├── research-analyst/
+│   ├── role-orchestrator/
+│   ├── security-guardian/
+│   ├── subject-matter-expert/
+│   ├── systems-architect/
+│   ├── systems-simplifier/
+│   └── visionary-futurist/
 │
 ├── adapters/                  # Thin agent-specific wrappers
 │   ├── claude-code/
@@ -206,6 +250,19 @@ polyagent-skills/
 │
 ├── mcp-servers/               # MCP servers for tool-based skills
 │
+├── templates/                 # Reusable document templates
+│   ├── decision-record.md
+│   ├── handoff-note.md
+│   ├── research-request.md
+│   └── role-status.md
+│
+├── tests/                     # Test suite
+│   ├── test_md_to_pdf_renderer.py
+│   └── test_polyagentctl.py
+│
+├── projects/                  # Example and reference projects
+│   └── example-project/
+│
 ├── scripts/                   # Automation
 │   ├── install-global-all.sh
 │   ├── install-openclaw-global.sh
@@ -213,12 +270,15 @@ polyagent-skills/
 │   ├── install-to-project.sh
 │   ├── check-mermaid.sh
 │   ├── design-readiness-check.sh
+│   ├── gate-status-check.sh
 │   ├── init-requirement-issues.sh
 │   ├── sync-agent-todo.sh
+│   ├── verify-context-pack.sh
 │   ├── sync-adapters.sh
 │   ├── pull-skill.sh
 │   ├── md-to-pdf.sh
 │   ├── md-to-pdf-renderer.py
+│   ├── lib-common.sh
 │   └── polyagentctl.py
 │
 ├── agent-notes/               # Cross-cutting agent observations
@@ -266,6 +326,9 @@ polyagent-skills/
 
 # Convert Markdown with Mermaid diagrams to PDF (auto-selects render path; falls back to HTML when needed)
 ./scripts/md-to-pdf.sh path/to/document.md output.pdf
+
+# Verify context pack structure and traceability
+./scripts/verify-context-pack.sh context/pack.md
 ```
 
 ## License

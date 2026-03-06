@@ -2,6 +2,15 @@
 
 ## How to Contribute
 
+### Before You Start: Gated Development Lifecycle
+
+Before implementing any skill or feature, follow the gated development lifecycle in
+`common-skills/development-lifecycle-gates.md`.
+
+Gates: **G0 Discovery → G1 Requirements → G2 Design → G3 POC/Spike → G4 Implementation → G5 Review → G6 Ship**
+
+Check `agent.todo.md` for gate status on any ongoing work. Start at the earliest incomplete gate.
+
 ### Adding a New Skill
 
 1. **Write a spec first** — Create `docs/specs/<skill-name>-spec.md` using the [spec template](docs/specs/SPEC_TEMPLATE.md)

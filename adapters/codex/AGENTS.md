@@ -46,6 +46,27 @@ Gates are mandatory by default. Check `agent.todo.md` for gate status. Start at 
 - `skills/desensitizer/` — Anonymize and mask sensitive data
 - `skills/remote-ops/` — Deployment, infrastructure, and operations management
 - `skills/expert-research/` — Expert deep analysis and decision support for high-stakes/ambiguous topics
+- `skills/context-orchestrator/` — Build reusable project context packs and session handoffs
+- `skills/automation-architect/` — Design automation pipelines, CI/CD systems, and workflow automation
+- `skills/business-strategist/` — Market positioning, business model design, and competitive strategy
+- `skills/customer-advocate/` — Deep user empathy and voice-of-customer for product decisions
+- `skills/devils-advocate/` — Stress-test decisions and plans by arguing the opposing case
+- `skills/engineering-team/` — Translate specs into engineering tasks, plans, and code scaffolds
+- `skills/entrepreneur/` — Opportunity-first thinking, value propositions, and business outcomes
+- `skills/growth-engineer/` — Acquisition, activation, retention, and referral growth systems
+- `skills/historian-knowledge-curator/` — Organizational memory, decisions, and learnings capture
+- `skills/ideator/` — Divergent idea generation and creative lateral thinking
+- `skills/operations-commander/` — Production readiness, deployment, runbooks, and incident response
+- `skills/poc-spike/` — Proof-of-concept spikes to de-risk technical unknowns
+- `skills/product-manager/` — Product spec, feature prioritization, and outcome-driven decisions
+- `skills/qa-validator/` — Test strategies, acceptance criteria, and pre-delivery validation
+- `skills/research-analyst/` — Deep research, evidence synthesis, and confidence-aware findings
+- `skills/role-orchestrator/` — Classify tasks, select roles, manage handoffs across multi-agent workflows
+- `skills/security-guardian/` — Threat modeling, vulnerability review, and secure design validation
+- `skills/subject-matter-expert/` — Parameterizable deep domain expert (e.g. SME Kubernetes, SME Finance)
+- `skills/systems-architect/` — Scalable system design, architecture decisions, and trade-off analysis
+- `skills/systems-simplifier/` — Identify and eliminate unnecessary complexity and over-engineering
+- `skills/visionary-futurist/` — Long-horizon technology trajectories and second-order consequences
 
 ## Common Skills
 
@@ -55,6 +76,7 @@ Gates are mandatory by default. Check `agent.todo.md` for gate status. Start at 
 - `common-skills/document-tail-sections.md` — Standard document endings
 - `common-skills/output-formatting.md` — Formatting conventions
 - `common-skills/quality-checklist.md` — Pre-delivery quality gates
+- `common-skills/mermaid-to-pdf.md` — Mermaid diagram rendering and PDF export
 
 ## Pre-PR Quality Gate (Required)
 
