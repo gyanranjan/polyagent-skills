@@ -13,7 +13,15 @@ jobs:
 
       - name: Bash syntax check
         run: |
-          for f in scripts/*.sh; do
+          shopt -s nullglob
+          files=(scripts/*.sh)
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No shell scripts found under scripts/; skipping bash syntax check."
+            exit 0
+          fi
+
+          for f in "${files[@]}"; do
             bash -n "$f"
           done
 
