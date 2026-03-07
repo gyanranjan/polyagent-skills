@@ -24,11 +24,35 @@ Do not create ad-hoc per-project converters unless explicitly requested.
 `polyagentctl export-pdf` auto-selects the best available approach with this precedence:
 
 1. **Inline SVG (no tools needed):** `flowchart`, `erDiagram`, `sequenceDiagram` rendered to SVG in pure Python
-2. **Mermaid.js CDN:** all other diagram types rendered in a `<div class="mermaid">` block via CDN (requires browser/headless Chrome for PDF)
+2. **Static Mermaid image fallback:** all other diagram types are converted to `https://mermaid.ink/img/...` URLs using URL-safe Base64 encoding (no browser-side JS timing dependency)
 3. **PDF via wkhtmltopdf or headless Chromium** — when available
 4. **Fallback:** HTML artifact for manual browser print-to-PDF
 
 This keeps one reliable implementation in a single file (`scripts/polyagentctl.py`) with no shell dependencies.
+
+## Tool Availability (Important for Agents)
+
+Before any PDF export task, ensure `polyagentctl` is callable directly:
+
+```bash
+polyagentctl --help
+```
+
+If not available on `PATH`, use one of these setup paths:
+
+```bash
+# Preferred: global setup also installs ~/.local/bin/polyagentctl
+python3 scripts/polyagentctl.py install-global copy
+
+# Explicit fallback install
+python3 scripts/polyagentctl.py self-install
+```
+
+After install, run:
+
+```bash
+polyagentctl doctor
+```
 
 ## Strategy Details
 
@@ -42,22 +66,22 @@ When `mmdc` (Mermaid CLI) is installed:
 2. **Replace** the Mermaid codeblock in Markdown with an image reference
 3. **Convert** the image-embedded Markdown to PDF via pandoc or wkhtmltopdf
 
-### Path B: HTML with Mermaid JS (No mmdc Needed)
+### Path B: Static Mermaid Image Fallback (No mmdc Needed)
 
-When `mmdc` is NOT installed:
+When `mmdc` is NOT installed (or for unsupported inline-render diagram types):
 
-1. **Generate** a self-contained HTML file with Mermaid JS from CDN
-2. Mermaid blocks become `<div class="mermaid">` elements rendered by the browser
-3. **Convert** to PDF via headless browser (Chromium, puppeteer) or open in any browser and print
+1. **Convert** Mermaid blocks to static image URLs (`https://mermaid.ink/img/...`) in export HTML
+2. **Avoid** browser-side Mermaid JS execution race conditions during print-to-PDF
+3. **Convert** to PDF via wkhtmltopdf or headless browser, or open HTML and print manually
 
-This path requires no pre-rendering tools — the browser renders Mermaid natively.
+This path is deterministic and does not rely on async Mermaid JS finishing before PDF capture.
 
 ### Fallback: HTML File
 
 When no PDF converter is available:
 
-1. Produce a self-contained HTML file with live Mermaid diagrams
-2. Open in any browser to view rendered diagrams
+1. Produce an HTML file with inline SVG diagrams and/or static Mermaid image links
+2. Open in any browser to verify diagram rendering
 3. Print to PDF from the browser (Ctrl+P / Cmd+P)
 
 ## Authoring Guidelines (PDF-Safe Mermaid)
@@ -103,14 +127,14 @@ polyagentctl export-pdf input.md output.pdf
 
 # The tool auto-detects:
 # - flowchart/erDiagram/sequenceDiagram → inline SVG (no external tools)
-# - other mermaid types                → Mermaid.js CDN div
+# - other mermaid types                → static mermaid.ink image fallback
 # - wkhtmltopdf or Chromium available? → PDF
 # - Nothing available?                 → HTML fallback
 ```
 
 ### Sandbox/Permission Guidance
 
-If headless browser conversion fails in a sandboxed environment (common with Snap Chromium), rerun conversion with elevated permissions in the execution environment. Keep the command unchanged; only permission level should change.
+If headless browser conversion fails in a sandboxed environment (common with Snap Chromium), keep the same command and ensure Chromium is invoked with sandbox-safe flags (`--no-sandbox --disable-gpu --allow-file-access-from-files`) as done by `polyagentctl export-pdf`.
 
 If automation remains blocked:
 1. Generate HTML via `--html`
@@ -199,7 +223,7 @@ polyagentctl export-pdf input.md --html
 # 3. Install puppeteer for automated PDF: npm install -g puppeteer
 ```
 
-The HTML file is self-contained with Mermaid JS loaded from CDN. It includes print-optimized CSS for clean PDF output.
+The HTML file includes print-optimized CSS and deterministic diagram rendering (inline SVG and/or static image fallback).
 
 ### Option D: No Tooling Available
 
@@ -236,7 +260,7 @@ Save as `mermaid-pdf-config.json` and use: `mmdc -i input.mmd -o output.svg -c m
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| Diagram appears as raw code in PDF | Mermaid block not pre-rendered | Use `polyagentctl export-pdf` (auto-selects best path) or `--html` flag for browser-based rendering |
+| Diagram appears as raw code in PDF | Export path bypassed `polyagentctl` or markdown parser escaped HTML | Use `polyagentctl export-pdf` so Mermaid blocks are converted before PDF generation |
 | Diagram is blurry in PDF | PNG at low resolution | Use SVG instead, or PNG with `-s 2` or higher |
 | Diagram labels are clipped/overlapping | Labels too long or too many nodes | Shorten labels to < 40 chars, split diagram |
 | mmdc hangs or crashes | Chromium sandbox issue in container/CI | Use `mmdc --puppeteerConfigFile` with `{"args": ["--no-sandbox"]}` |

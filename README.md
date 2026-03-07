@@ -53,9 +53,11 @@ python3 scripts/polyagentctl.py doctor --fix
 # One-time global install (Claude Code + Codex + Kiro + Gemini + OpenClaw)
 python3 scripts/polyagentctl.py install-global copy
 
-# Install polyagentctl to PATH so you can call it from anywhere
-python3 scripts/polyagentctl.py self-install
+# `install-global` also installs ~/.local/bin/polyagentctl
 polyagentctl doctor   # now available globally
+
+# (Optional) explicit reinstall to PATH
+python3 scripts/polyagentctl.py self-install
 
 # Project install
 polyagentctl install-project /path/to/my-project all
