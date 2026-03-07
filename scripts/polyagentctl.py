@@ -1602,7 +1602,8 @@ def _render_sequence(code: str) -> str | None:
 
 def _mermaid_cdn_div(code: str) -> str:
     """Wrap unrecognised mermaid code in a Mermaid.js CDN div (renders in browser/headless Chrome)."""
-    return f'\n<div class="mermaid">{html_mod.escape(code)}</div>\n'
+    # Double newlines ensure markdown-it treats this as a block HTML element (not inline)
+    return f'\n\n<div class="mermaid">{html_mod.escape(code)}</div>\n\n'
 
 
 _MERMAID_CDN_SCRIPT = (
@@ -1614,32 +1615,50 @@ _MERMAID_CDN_SCRIPT = (
 )
 
 
-def _replace_mermaid_blocks(markdown: str) -> str:
+def _extract_mermaid_blocks(markdown: str) -> tuple[str, dict, bool]:
+    """Replace mermaid fences with unique placeholders; return (patched_md, placeholder_map, has_cdn).
+
+    Placeholders prevent markdown-it from escaping raw HTML. After rendering
+    we swap placeholders back for real diagram HTML.
+    """
+    placeholders: dict[str, str] = {}
     has_cdn_fallback = False
+    counter = [0]
 
     def repl(m: re.Match[str]) -> str:
         nonlocal has_cdn_fallback
         code = m.group(1).strip()
         svg = _render_flowchart(code) or _render_er(code) or _render_sequence(code)
+        token = f"MERMAID_BLOCK_{counter[0]}_PLACEHOLDER"
+        counter[0] += 1
         if svg:
-            return f'\n<div class="diagram">{svg}</div>\n'
-        # Unknown diagram type: emit a Mermaid.js CDN div
-        has_cdn_fallback = True
-        return _mermaid_cdn_div(code)
+            placeholders[token] = f'<div class="diagram">{svg}</div>'
+        else:
+            # Unknown diagram type: use Mermaid.js CDN div
+            has_cdn_fallback = True
+            placeholders[token] = f'<div class="mermaid">{html_mod.escape(code)}</div>'
+        return f"\n\n{token}\n\n"
 
-    result = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL).sub(repl, markdown)
-    return result, has_cdn_fallback
+    patched = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL).sub(repl, markdown)
+    return patched, placeholders, has_cdn_fallback
 
 
 def _render_to_html(source: str) -> str:
-    source, has_cdn_fallback = _replace_mermaid_blocks(source)
+    patched, placeholders, has_cdn_fallback = _extract_mermaid_blocks(source)
     try:
         from markdown_it import MarkdownIt
         md = MarkdownIt("default", {"html": True, "typographer": True})
-        body = md.render(source)
+        body = md.render(patched)
     except ImportError:
         # Basic fallback: wrap paragraphs
-        body = "<pre>" + html_mod.escape(source) + "</pre>"
+        body = "<pre>" + html_mod.escape(patched) + "</pre>"
+
+    # Swap placeholder tokens for the real HTML; markdown-it wraps them in <p>,
+    # so we strip the surrounding paragraph tags produced around each token.
+    for token, html_block in placeholders.items():
+        body = body.replace(f"<p>{token}</p>", html_block)
+        body = body.replace(token, html_block)  # fallback if <p> not added
+
     cdn_script = _MERMAID_CDN_SCRIPT if has_cdn_fallback else ""
     return f"""<!doctype html>
 <html>
@@ -1726,6 +1745,15 @@ def self_install_cmd(args: argparse.Namespace) -> int:
     shutil.copy2(SCRIPT_DIR / "polyagentctl.py", target)
     target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     print(f"Installed: {target}")
+
+    # Also install the standalone md-to-pdf companion tool
+    md_to_pdf_src = SCRIPT_DIR / "md-to-pdf"
+    if md_to_pdf_src.exists():
+        md_to_pdf_target = target.parent / "md-to-pdf"
+        shutil.copy2(md_to_pdf_src, md_to_pdf_target)
+        md_to_pdf_target.chmod(md_to_pdf_target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        print(f"Installed: {md_to_pdf_target}")
+
     return 0
 
 

@@ -18,17 +18,18 @@ Apply these guidelines when:
 
 ## Default Workflow (Mandatory)
 
-Use `polyagentctl export-pdf` as the canonical/default path for all Mermaid-to-PDF export.
+Use `md-to-pdf` (or its alias `polyagentctl export-pdf`) as the canonical/default path for all Mermaid-to-PDF export.
 Do not create ad-hoc per-project converters unless explicitly requested.
 
-`polyagentctl export-pdf` auto-selects the best available approach with this precedence:
+Both tools share identical rendering logic and auto-select the best available approach:
 
 1. **Inline SVG (no tools needed):** `flowchart`, `erDiagram`, `sequenceDiagram` rendered to SVG in pure Python
 2. **Mermaid.js CDN:** all other diagram types rendered in a `<div class="mermaid">` block via CDN (requires browser/headless Chrome for PDF)
 3. **PDF via wkhtmltopdf or headless Chromium** — when available
 4. **Fallback:** HTML artifact for manual browser print-to-PDF
 
-This keeps one reliable implementation in a single file (`scripts/polyagentctl.py`) with no shell dependencies.
+`md-to-pdf` is a standalone script installed alongside `polyagentctl` in `~/.local/bin/`.
+Install both with: `polyagentctl self-install`
 
 ## Strategy Details
 
@@ -89,16 +90,21 @@ When writing Mermaid diagrams that will be exported to PDF, follow these rules:
 
 ## Conversion Process
 
-### Option A: `polyagentctl export-pdf` — Required Default
+### Option A: `md-to-pdf` or `polyagentctl export-pdf` — Required Default
+
+Both commands are equivalent. Prefer `md-to-pdf` when calling from skill steps or scripts
+(shorter, no subcommand needed). Use `polyagentctl export-pdf` when already chaining other
+polyagentctl commands in the same shell session.
 
 ```bash
-# Auto-selects best path based on available tools
+# Standalone tool (installed to ~/.local/bin by polyagentctl self-install)
+md-to-pdf input.md                    # → input.pdf (or input.html as fallback)
+md-to-pdf input.md --html             # → input.html (force HTML)
+md-to-pdf input.md output.pdf         # explicit output path
+
+# Equivalent polyagentctl subcommand
 polyagentctl export-pdf input.md              # → input.pdf (or input.html as fallback)
-
-# Force HTML output (useful in CI or when no PDF tool available)
 polyagentctl export-pdf input.md --html       # → input.html
-
-# Explicit output path
 polyagentctl export-pdf input.md output.pdf
 
 # The tool auto-detects:
@@ -106,6 +112,11 @@ polyagentctl export-pdf input.md output.pdf
 # - other mermaid types                → Mermaid.js CDN div
 # - wkhtmltopdf or Chromium available? → PDF
 # - Nothing available?                 → HTML fallback
+```
+
+Install both tools to PATH:
+```bash
+polyagentctl self-install   # installs polyagentctl + md-to-pdf to ~/.local/bin/
 ```
 
 ### Sandbox/Permission Guidance
@@ -191,7 +202,8 @@ wkhtmltopdf --enable-local-file-access temp.html output.pdf
 When no PDF engine is available:
 
 ```bash
-polyagentctl export-pdf input.md --html
+md-to-pdf input.md --html
+# or: polyagentctl export-pdf input.md --html
 
 # Then either:
 # 1. Open output.html in a browser → diagrams render automatically
@@ -236,11 +248,11 @@ Save as `mermaid-pdf-config.json` and use: `mmdc -i input.mmd -o output.svg -c m
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| Diagram appears as raw code in PDF | Mermaid block not pre-rendered | Use `polyagentctl export-pdf` (auto-selects best path) or `--html` flag for browser-based rendering |
+| Diagram appears as raw code in PDF | Mermaid block not pre-rendered | Use `md-to-pdf` or `polyagentctl export-pdf` (auto-selects best path) or `--html` flag for browser-based rendering |
 | Diagram is blurry in PDF | PNG at low resolution | Use SVG instead, or PNG with `-s 2` or higher |
 | Diagram labels are clipped/overlapping | Labels too long or too many nodes | Shorten labels to < 40 chars, split diagram |
 | mmdc hangs or crashes | Chromium sandbox issue in container/CI | Use `mmdc --puppeteerConfigFile` with `{"args": ["--no-sandbox"]}` |
-| mmdc render stalls for too long | npx/tooling latency or blocked Chromium | Run `polyagentctl export-pdf --html` to bypass mmdc entirely |
+| mmdc render stalls for too long | npx/tooling latency or blocked Chromium | Run `md-to-pdf --html` to bypass mmdc entirely |
 | Diagram renders but colors are too dark | Dark theme used | Use `-t neutral` or custom config above |
 | SVG not rendering in pandoc PDF | xelatex doesn't embed SVG natively | Convert SVG to PNG first: `inkscape -d 300 diagram.svg -o diagram.png`, or use `--pdf-engine=weasyprint` |
 
