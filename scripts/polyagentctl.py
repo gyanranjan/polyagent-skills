@@ -633,6 +633,30 @@ def install_global_cmd(args: argparse.Namespace) -> int:
         manifest, MANAGED_TAG_GLOBAL, backup_dir, "Gemini global config",
     )
 
+    # Register skills with Gemini CLI native skill registry if gemini is available
+    gemini_bin = shutil.which("gemini")
+    if gemini_bin:
+        print()
+        print("Registering skills with Gemini CLI (gemini skills link)...")
+        linked = 0
+        for skill_dir in sorted(src_skills.iterdir()):
+            if not (skill_dir / "SKILL.md").exists():
+                continue
+            result = subprocess.run(
+                [gemini_bin, "skills", "link", str(skill_dir), "--consent"],
+                capture_output=True, text=True,
+            )
+            if result.returncode == 0:
+                linked += 1
+            else:
+                print(f"  Warning: could not link {skill_dir.name}: {result.stderr.strip()}")
+        print(f"  Linked {linked} skills into Gemini CLI registry")
+    else:
+        print()
+        print("  Gemini CLI not found in PATH — skipping native skill registration.")
+        print("  Install it with: npm install -g @google/gemini-cli@latest")
+        print("  Then re-run: polyagentctl install-global")
+
     print()
     print("=== Done ===")
     print(f"Manifest: {manifest}")
