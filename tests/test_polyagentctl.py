@@ -117,8 +117,8 @@ class PolyagentCtlTests(unittest.TestCase):
             self.assertIn("Bob", content)
             self.assertNotIn("```mermaid", content)
 
-    def test_export_pdf_html_mermaid_unknown_uses_cdn(self):
-        """Unknown mermaid diagram types fall back to Mermaid.js CDN div."""
+    def test_export_pdf_html_mermaid_unknown_uses_static_image(self):
+        """Unknown mermaid diagram types fall back to static mermaid.ink image URLs."""
         with tempfile.TemporaryDirectory() as td:
             inp = Path(td) / "pie.md"
             inp.write_text(
@@ -135,10 +135,43 @@ class PolyagentCtlTests(unittest.TestCase):
             rc = self.mod.export_pdf_cmd(args)
             self.assertEqual(rc, 0)
             content = out.read_text(encoding="utf-8")
-            # CDN script injected, raw mermaid div present
-            self.assertIn("mermaid.esm.min.mjs", content)
-            self.assertIn('class="mermaid"', content)
+            self.assertIn("https://mermaid.ink/img/", content)
+            self.assertIn('class="diagram diagram-image"', content)
+            self.assertNotIn("mermaid.esm.min.mjs", content)
             self.assertNotIn("```mermaid", content)
+
+
+    def test_export_pdf_chromium_uses_absolute_file_url_and_sandbox_flags(self):
+        with tempfile.TemporaryDirectory() as td:
+            inp = Path(td) / "doc.md"
+            inp.write_text("# Hello\n", encoding="utf-8")
+            out = Path(td) / "doc.pdf"
+            args = SimpleNamespace(html=False, input_md=str(inp), output=str(out))
+
+            called = []
+
+            def fake_run(cmd, cwd=None):
+                called.append(cmd)
+                return 0
+
+            def fake_which(name):
+                if name in {"wkhtmltopdf"}:
+                    return None
+                if name in {"chromium"}:
+                    return "/usr/bin/chromium"
+                return None
+
+            with patch.object(self.mod, "run", side_effect=fake_run):
+                with patch.object(self.mod, "which", side_effect=fake_which):
+                    rc = self.mod.export_pdf_cmd(args)
+
+            self.assertEqual(rc, 0)
+            self.assertTrue(called)
+            cmd = called[0]
+            self.assertIn("--no-sandbox", cmd)
+            self.assertIn("--disable-gpu", cmd)
+            self.assertIn("--allow-file-access-from-files", cmd)
+            self.assertTrue(any(str(part).startswith("file://") for part in cmd))
 
     def test_polyagentctl_is_standalone(self):
         """Script has shebang and __main__ guard — no shell wrapper needed."""
@@ -174,6 +207,7 @@ class PolyagentCtlTests(unittest.TestCase):
                         with redirect_stdout(buf):
                             rc = self.mod.install_global_cmd(args)
             self.assertEqual(rc, 0)
+            self.assertTrue((Path(td) / ".local/bin/polyagentctl").exists())
 
     def test_uninstall_global_dry_run(self):
         with tempfile.TemporaryDirectory() as td:
