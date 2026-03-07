@@ -46,27 +46,22 @@ Every AI coding agent has its own way of consuming instructions — `CLAUDE.md`,
 git clone https://github.com/gyanranjan/polyagent-skills.git
 cd polyagent-skills
 
+# Check prerequisites (and optionally install missing tools)
+python3 scripts/polyagentctl.py doctor --fix
+
 # One-time global install (Claude Code + Codex + Kiro + Gemini + OpenClaw)
-./scripts/install-global-all.sh copy
+python3 scripts/polyagentctl.py install-global copy
 
-# Project install (kept for per-repo adapters)
-./scripts/install-to-project.sh /path/to/my-project all
+# Install polyagentctl to PATH so you can call it from anywhere
+python3 scripts/polyagentctl.py self-install
+polyagentctl doctor   # now available globally
 
-# Or install for a specific agent only
-./scripts/install-to-project.sh /path/to/my-project claude-code
+# Project install
+polyagentctl install-project /path/to/my-project all
+polyagentctl install-project /path/to/my-project claude-code
 ```
 
 Use global install when you want "set once, reuse everywhere." Use project install when you want repo-local agent config files.
-
-Preferred unified CLI:
-
-```bash
-# One command surface for checks/install/export
-./scripts/polyagentctl.py check
-./scripts/polyagentctl.py install-global copy
-./scripts/polyagentctl.py export-pdf docs/spec.md docs/spec.pdf
-./scripts/polyagentctl.py self-install
-```
 
 ## Spec-Driven Delivery Flow
 
@@ -93,7 +88,7 @@ Key controls before coding:
 ### Global (one-time)
 
 ```bash
-./scripts/install-global-all.sh copy
+polyagentctl install-global copy
 ```
 
 This installs:
@@ -105,30 +100,28 @@ This installs:
 - Global Gemini instructions: `~/.gemini/instructions.md`
 - OpenClaw managed skills: `~/.openclaw/skills` and `~/.openclaw/common-skills`
 
-Optional dev mode:
+Optional dev mode (symlinks shared library for live edits):
 
 ```bash
-./scripts/install-global-all.sh link
+polyagentctl install-global link
 ```
-
-`link` symlinks the shared library for live edits; OpenClaw still receives normalized copied skills for parser compatibility.
 
 ### Uninstall global setup (safe)
 
 ```bash
 # Preview what would be removed
-./scripts/uninstall-global-all.sh --dry-run
+polyagentctl uninstall-global --dry-run
 
 # Remove only installer-managed paths
-./scripts/uninstall-global-all.sh
+polyagentctl uninstall-global
 ```
 
 Uninstall removes only paths recorded in installer manifest files and only when ownership markers match.
 
-### Per-project (existing behavior)
+### Per-project
 
 ```bash
-./scripts/install-to-project.sh /path/to/my-project all
+polyagentctl install-project /path/to/my-project all
 ```
 
 This copies adapters plus `skills/` and `common-skills/` into that specific project.
@@ -263,23 +256,8 @@ polyagent-skills/
 ├── projects/                  # Example and reference projects
 │   └── example-project/
 │
-├── scripts/                   # Automation
-│   ├── install-global-all.sh
-│   ├── install-openclaw-global.sh
-│   ├── uninstall-global-all.sh
-│   ├── install-to-project.sh
-│   ├── check-mermaid.sh
-│   ├── design-readiness-check.sh
-│   ├── gate-status-check.sh
-│   ├── init-requirement-issues.sh
-│   ├── sync-agent-todo.sh
-│   ├── verify-context-pack.sh
-│   ├── sync-adapters.sh
-│   ├── pull-skill.sh
-│   ├── md-to-pdf.sh
-│   ├── md-to-pdf-renderer.py
-│   ├── lib-common.sh
-│   └── polyagentctl.py
+├── scripts/                   # Automation (single entry point)
+│   └── polyagentctl.py        # Unified CLI — all operations, no shell deps
 │
 ├── agent-notes/               # Cross-cutting agent observations
 │
@@ -306,29 +284,43 @@ polyagent-skills/
 - [Known Issues](KNOWN_ISSUES.md) — Current limitations and workarounds
 - [Contributing Guide](CONTRIBUTING.md) — How to add skills and adapters
 
-## Workflow Automation Scripts
+## Workflow Automation (`polyagentctl`)
+
+All operations are available through a single Python CLI — no shell required.
 
 ```bash
-# Mermaid tooling check (non-blocking)
-./scripts/check-mermaid.sh
+# Check prerequisites; --fix to install missing optional tools interactively
+polyagentctl doctor [--fix]
 
 # Validate design readiness sections (strict: fails on Open)
-./scripts/design-readiness-check.sh path/to/requirements.md path/to/spec.md
+polyagentctl design-check path/to/requirements.md path/to/spec.md
 
 # Structure-only validation (allows Open)
-./scripts/design-readiness-check.sh --allow-open path/to/spec.md
+polyagentctl design-check --allow-open path/to/spec.md
+
+# Check lifecycle gate status
+polyagentctl gate-check [agent.todo.md]
 
 # Sync requirement/spec traceability into agent.todo.md
-./scripts/sync-agent-todo.sh agent.todo.md path/to/requirements.md path/to/spec.md
+polyagentctl sync-todo agent.todo.md path/to/requirements.md [path/to/spec.md]
 
 # Create GitHub issue stubs from REQ IDs
-./scripts/init-requirement-issues.sh path/to/requirements.md org/repo
+polyagentctl init-issues path/to/requirements.md org/repo
 
-# Convert Markdown with Mermaid diagrams to PDF (auto-selects render path; falls back to HTML when needed)
-./scripts/md-to-pdf.sh path/to/document.md output.pdf
+# Convert Markdown with Mermaid diagrams to PDF (falls back to HTML when no PDF tool available)
+polyagentctl export-pdf path/to/document.md
 
 # Verify context pack structure and traceability
-./scripts/verify-context-pack.sh context/pack.md
+polyagentctl verify-context-pack context/pack.md
+
+# Regenerate skill lists in all adapter files
+polyagentctl sync-adapters
+
+# Pull a skill from skills.sh
+polyagentctl pull-skill <skill-name-or-url>
+
+# Pre-PR quality gate
+polyagentctl check --strict --project .
 ```
 
 ## License

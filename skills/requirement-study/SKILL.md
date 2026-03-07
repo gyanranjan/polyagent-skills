@@ -160,7 +160,7 @@ If GitHub integration is available, create issue stubs for `REQ-*` and reflect I
 Unless the user explicitly opts out, export a PDF copy of the requirements doc:
 
 ```bash
-./scripts/md-to-pdf.sh requirement-study-<topic>.md requirement-study-<topic>.pdf
+polyagentctl export-pdf requirement-study-<topic>.md
 ```
 
 Add the generated PDF path to `agent.todo.md` gate evidence.

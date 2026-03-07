@@ -65,7 +65,7 @@ Check against the portability rules:
 - Self-contained steps
 
 ### Step 6: Update Adapters
-Run `scripts/sync-adapters.sh` to add the new skill to all adapter files.
+Run `polyagentctl sync-adapters` to add the new skill to all adapter files.
 
 ## Output Format
 

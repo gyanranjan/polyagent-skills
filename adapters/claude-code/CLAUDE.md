@@ -68,7 +68,6 @@ Shared conventions are in `common-skills/`. Apply them when referenced by a skil
 - `skills/historian-knowledge-curator/` — Organizational memory, decisions, and learnings capture
 - `skills/ideator/` — Divergent idea generation and creative lateral thinking
 - `skills/operations-commander/` — Production readiness, deployment, runbooks, and incident response
-- `skills/poc-spike/` — Proof-of-concept spikes to de-risk technical unknowns
 - `skills/product-manager/` — Product spec, feature prioritization, and outcome-driven decisions
 - `skills/qa-validator/` — Test strategies, acceptance criteria, and pre-delivery validation
 - `skills/research-analyst/` — Deep research, evidence synthesis, and confidence-aware findings
@@ -103,5 +102,5 @@ Shared conventions are in `common-skills/`. Apply them when referenced by a skil
 Before opening or merging any PR, run:
 
 ```bash
-./scripts/polyagentctl.py check --strict --project .
+polyagentctl check --strict --project .
 ```
