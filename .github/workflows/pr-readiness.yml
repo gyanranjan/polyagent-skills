@@ -13,6 +13,7 @@ jobs:
 
       - name: Bash syntax check
         run: |
+          shopt -s nullglob
           for f in scripts/*.sh; do
             bash -n "$f"
           done
@@ -33,17 +34,17 @@ jobs:
           coverage report --include="scripts/*.py" --fail-under=70
 
       - name: Mermaid preflight (non-blocking by design)
-        run: ./scripts/check-mermaid.sh
+        run: python scripts/polyagentctl.py doctor || true
 
       - name: Design readiness structure check
         run: |
-          ./scripts/design-readiness-check.sh --allow-open \
+          python scripts/polyagentctl.py design-check --allow-open \
             skills/requirement-study/references/requirement-template.md \
             docs/specs/SPEC_TEMPLATE.md
 
       - name: Agent TODO sync dry-run
         run: |
           cp agent.todo.md /tmp/agent.todo.md
-          ./scripts/sync-agent-todo.sh /tmp/agent.todo.md \
+          python scripts/polyagentctl.py sync-todo /tmp/agent.todo.md \
             skills/requirement-study/references/requirement-template.md \
             docs/specs/SPEC_TEMPLATE.md
