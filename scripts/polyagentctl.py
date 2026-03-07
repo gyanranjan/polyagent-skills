@@ -248,6 +248,19 @@ def _parse_skill_frontmatter(skill_md: Path) -> tuple[str, str]:
     return name, description
 
 
+def _build_skill_list(skills_dir: Path) -> str:
+    """Scan skills_dir and return a bullet list of available skills."""
+    entries: list[str] = []
+    if skills_dir.is_dir():
+        for skill_dir in sorted(skills_dir.iterdir()):
+            skill_md = skill_dir / "SKILL.md"
+            if skill_md.exists():
+                _, description = _parse_skill_frontmatter(skill_md)
+                desc = f" — {description}" if description else ""
+                entries.append(f"- `{skill_dir.name}`{desc}")
+    return "\n".join(entries)
+
+
 def _skill_body(skill_md: Path) -> str:
     """Return skill markdown body without frontmatter."""
     text = skill_md.read_text(encoding="utf-8")
@@ -363,7 +376,8 @@ polyagentctl check --strict --project .
 """
 
 
-def _codex_content(global_skills: Path, global_common: Path) -> str:
+def _codex_content(global_skills: Path, global_common: Path, skill_list: str = "") -> str:
+    skill_section = f"\n## Available Skills\n\n{skill_list}\n" if skill_list else ""
     return f"""\
 <!-- {MANAGED_MARKER_KEY}: {MANAGED_TAG_GLOBAL} -->
 # Agent Instructions - polyagent-skills (global)
@@ -392,12 +406,12 @@ Gates are mandatory by default. Check `agent.todo.md` for gate status. Start at 
 6. Keep `agent.todo.md` workflow snapshot and gate evidence updated continuously.
 
 When you receive a task:
-1. Check `{global_skills}` for a matching skill by reading each SKILL.md description.
-2. Read the full SKILL.md for the matched skill.
+1. Match the task to a skill from the list below.
+2. Read the full `{global_skills}/<skill-name>/SKILL.md`.
 3. Follow its Process steps in order.
 4. Apply referenced common-skills from `{global_common}`.
 5. Deliver in the specified Output Format.
-
+{skill_section}
 ## Tooling (use polyagentctl for all standard operations)
 
 ```bash
@@ -417,7 +431,8 @@ polyagentctl check --strict --project .
 """
 
 
-def _kiro_content(global_skills: Path, global_common: Path) -> str:
+def _kiro_content(global_skills: Path, global_common: Path, skill_list: str = "") -> str:
+    skill_section = f"\n## Available Skills\n\n{skill_list}\n" if skill_list else ""
     return f"""\
 <!-- {MANAGED_MARKER_KEY}: {MANAGED_TAG_GLOBAL} -->
 # Skill Library Integration - polyagent-skills (global)
@@ -444,12 +459,12 @@ Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Sk
 
 ## Task Workflow
 
-1. Match the task to a skill in `{global_skills}`.
-2. Read the full matched `SKILL.md`.
+1. Match the task to a skill from the list below.
+2. Read the full `{global_skills}/<skill-name>/SKILL.md`.
 3. Follow its Process steps in order.
 4. Apply referenced common-skills from `{global_common}`.
 5. Deliver in the specified output format.
-
+{skill_section}
 ## Tooling
 
 ```bash
@@ -469,9 +484,10 @@ polyagentctl check --strict --project .
 """
 
 
-def _gemini_content(global_skills: Path, global_common: Path) -> str:
+def _gemini_content(global_skills: Path, global_common: Path, skill_list: str = "") -> str:
+    skill_section = f"\n## Available Skills\n\n{skill_list}\n" if skill_list else ""
     return f"""\
-<!-- {MANAGED_MARKER_KEY}: {MANAGED_TAG_GLOBAL} -->
+<!-- {MANAGED_MARKER_KEY}: polyagentctl install-global -->
 # Agent Instructions - polyagent-skills (global)
 
 You have access to a portable skill library:
@@ -496,12 +512,12 @@ Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Sk
 
 ## Task Workflow
 
-1. Check `{global_skills}` for a matching skill.
-2. Read the full matched `SKILL.md`.
+1. Match the task to a skill from the list below.
+2. Read the full `{global_skills}/<skill-name>/SKILL.md`.
 3. Follow its Process steps in order.
 4. Apply referenced common-skills from `{global_common}`.
 5. Deliver in the specified output format.
-
+{skill_section}
 ## Tooling
 
 ```bash
@@ -595,6 +611,7 @@ def install_global_cmd(args: argparse.Namespace) -> int:
     print()
     print("Writing global agent configs...")
     print("  (Existing config files will be backed up before replacement.)")
+    skill_list = _build_skill_list(src_skills)
     _write_agent_config(
         Path.home() / ".claude" / "CLAUDE.md",
         _claude_content(global_skills, global_common),
@@ -602,17 +619,17 @@ def install_global_cmd(args: argparse.Namespace) -> int:
     )
     _write_agent_config(
         Path.home() / ".codex" / "AGENTS.md",
-        _codex_content(global_skills, global_common),
+        _codex_content(global_skills, global_common, skill_list),
         manifest, MANAGED_TAG_GLOBAL, backup_dir, "Codex global config",
     )
     _write_agent_config(
         Path.home() / ".kiro" / "specs" / "polyagent-skills.md",
-        _kiro_content(global_skills, global_common),
+        _kiro_content(global_skills, global_common, skill_list),
         manifest, MANAGED_TAG_GLOBAL, backup_dir, "Kiro global config",
     )
     _write_agent_config(
         Path.home() / ".gemini" / "instructions.md",
-        _gemini_content(global_skills, global_common),
+        _gemini_content(global_skills, global_common, skill_list),
         manifest, MANAGED_TAG_GLOBAL, backup_dir, "Gemini global config",
     )
 
