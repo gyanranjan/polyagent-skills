@@ -300,6 +300,228 @@ class PolyagentCtlTests(unittest.TestCase):
             self.assertTrue(target.exists())
             self.assertTrue(os.access(target, os.X_OK))
 
+    def test_self_install_also_installs_md_to_pdf(self):
+        """self-install copies md-to-pdf companion script alongside polyagentctl."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "polyagentctl"
+            rc = self.mod.self_install_cmd(SimpleNamespace(path=str(target)))
+            self.assertEqual(rc, 0)
+            md_to_pdf = Path(td) / "md-to-pdf"
+            self.assertTrue(md_to_pdf.exists())
+            self.assertTrue(os.access(md_to_pdf, os.X_OK))
+
+    def test_export_pdf_html_mermaid_er(self):
+        """erDiagram blocks are rendered to inline SVG."""
+        with tempfile.TemporaryDirectory() as td:
+            inp = Path(td) / "er.md"
+            inp.write_text(
+                "# ER\n\n"
+                "```mermaid\n"
+                "erDiagram\n"
+                "    USER ||--o{ ORDER : places\n"
+                "    ORDER ||--|{ ITEM : contains\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            out = Path(td) / "er.html"
+            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
+            rc = self.mod.export_pdf_cmd(args)
+            self.assertEqual(rc, 0)
+            content = out.read_text(encoding="utf-8")
+            self.assertIn("<svg", content)
+            self.assertIn("USER", content)
+            self.assertNotIn("```mermaid", content)
+
+    def test_export_pdf_html_flowchart_lr(self):
+        """Flowchart LR direction renders horizontal SVG."""
+        with tempfile.TemporaryDirectory() as td:
+            inp = Path(td) / "lr.md"
+            inp.write_text(
+                "# LR Flow\n\n"
+                "```mermaid\n"
+                "flowchart LR\n"
+                "A[Input] --> B[Output]\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            out = Path(td) / "lr.html"
+            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
+            rc = self.mod.export_pdf_cmd(args)
+            self.assertEqual(rc, 0)
+            content = out.read_text(encoding="utf-8")
+            self.assertIn("<svg", content)
+            self.assertIn("Input", content)
+
+    def test_export_pdf_file_not_found(self):
+        """export_pdf_cmd returns 1 when the input file does not exist."""
+        args = SimpleNamespace(html=True, input_md="/nonexistent/path/file.md", output=None)
+        rc = self.mod.export_pdf_cmd(args)
+        self.assertEqual(rc, 1)
+
+    def test_export_pdf_auto_html_fallback(self):
+        """When no PDF tool and no explicit output, falls back to .html output."""
+        with tempfile.TemporaryDirectory() as td:
+            inp = Path(td) / "doc.md"
+            inp.write_text("# Title\n\nSome content.\n", encoding="utf-8")
+            args = SimpleNamespace(html=False, input_md=str(inp), output=None)
+            with patch.object(self.mod, "which", return_value=None):
+                rc = self.mod.export_pdf_cmd(args)
+            self.assertEqual(rc, 0)
+            # Fallback produces .html
+            self.assertTrue((Path(td) / "doc.html").exists())
+
+    def test_check_plain_text(self):
+        """check_cmd without --json prints human-readable tool status."""
+        args = SimpleNamespace(json=False, strict=False, project=None)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = self.mod.check_cmd(args)
+        out = buf.getvalue()
+        self.assertEqual(rc, 0)
+        self.assertIn("python3", out.lower())
+
+    def test_gate_check_failed_gate(self):
+        """gate_check_cmd returns 1 when a required gate is Failed."""
+        with tempfile.TemporaryDirectory() as td:
+            todo = Path(td) / "agent.todo.md"
+            todo.write_text(
+                "## Gate Status\n\n"
+                "| Gate | Name | Status | Evidence | Skip Reason |\n"
+                "|------|------|--------|----------|-------------|\n"
+                "| G0 | Discovery | Failed | | |\n",
+                encoding="utf-8",
+            )
+            args = SimpleNamespace(todo_file=str(todo))
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = self.mod.gate_check_cmd(args)
+            self.assertEqual(rc, 1)
+
+    def test_design_check_open_allow(self):
+        """design_check_cmd passes with Open checkpoints when --allow-open set."""
+        with tempfile.TemporaryDirectory() as td:
+            doc = Path(td) / "spec.md"
+            doc.write_text(
+                "## Design Readiness\n\n"
+                "| Checkpoint | Status |\n"
+                "|---|---|\n"
+                "| Architecture pattern | Open |\n"
+                "| Language/runtime | Open |\n"
+                "| Database strategy | Open |\n"
+                "| Logging/observability baseline | Open |\n",
+                encoding="utf-8",
+            )
+            args = SimpleNamespace(allow_open=True, docs=[str(doc)])
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = self.mod.design_check_cmd(args)
+            self.assertEqual(rc, 0)
+
+    def test_design_check_open_no_allow(self):
+        """design_check_cmd fails with Open checkpoints when --allow-open not set."""
+        with tempfile.TemporaryDirectory() as td:
+            doc = Path(td) / "spec.md"
+            doc.write_text(
+                "## Design Readiness\n\n"
+                "| Checkpoint | Status |\n"
+                "|---|---|\n"
+                "| Architecture pattern | Open |\n"
+                "| Language/runtime | Open |\n"
+                "| Database strategy | Open |\n"
+                "| Logging/observability baseline | Open |\n",
+                encoding="utf-8",
+            )
+            args = SimpleNamespace(allow_open=False, docs=[str(doc)])
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = self.mod.design_check_cmd(args)
+            self.assertEqual(rc, 1)
+
+    def test_sync_adapters_print_only(self):
+        """sync_adapters_cmd --print-only lists skills without writing files."""
+        args = SimpleNamespace(print_only=True)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = self.mod.sync_adapters_cmd(args)
+        self.assertEqual(rc, 0)
+        out = buf.getvalue()
+        self.assertIn("Skills found", out)
+
+    def test_verify_context_pack_file_not_found(self):
+        """verify_context_pack_cmd returns 1 for a missing file."""
+        args = SimpleNamespace(pack="/nonexistent/pack.md")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = self.mod.verify_context_pack_cmd(args)
+        self.assertEqual(rc, 1)
+
+    def test_verify_context_pack_passing(self):
+        """verify_context_pack_cmd passes when all required sections are present."""
+        with tempfile.TemporaryDirectory() as td:
+            pack = Path(td) / "pack.md"
+            pack.write_text(
+                "## Session Start\n"
+                "## Context Snapshot\n"
+                "## Goals and Non-Goals\n"
+                "## Active Decisions\n"
+                "## Architecture and Runtime\n"
+                "Architecture pattern: monolith\n"
+                "Language/runtime: Python 3.11\n"
+                "## Data and Storage\n"
+                "Database strategy: SQLite\n"
+                "## Observability Baseline\n"
+                "Logging/observability baseline: structlog\n"
+                "## Design Readiness\n"
+                "## Current Execution Plan\n"
+                "## Open Questions and Risks\n"
+                "## Traceability\n"
+                "REQ-001 covered\n",
+                encoding="utf-8",
+            )
+            args = SimpleNamespace(pack=str(pack))
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = self.mod.verify_context_pack_cmd(args)
+            self.assertEqual(rc, 0)
+
+    def test_render_flowchart_empty(self):
+        """_render_flowchart returns None for non-flowchart input."""
+        result = self.mod._render_flowchart("graph TD\nA --> B")
+        self.assertIsNone(result)
+
+    def test_render_er_empty(self):
+        """_render_er returns None when no relationships are found."""
+        result = self.mod._render_er("flowchart TD\nA --> B")
+        self.assertIsNone(result)
+
+    def test_render_sequence_empty(self):
+        """_render_sequence returns None for non-sequence input."""
+        result = self.mod._render_sequence("flowchart TD\nA --> B")
+        self.assertIsNone(result)
+
+    def test_export_pdf_html_mermaid_multiple_blocks(self):
+        """Multiple mermaid blocks in one document all render without escaping."""
+        with tempfile.TemporaryDirectory() as td:
+            inp = Path(td) / "multi.md"
+            inp.write_text(
+                "# Multi\n\n"
+                "```mermaid\n"
+                "flowchart TD\nA[Start] --> B[End]\n"
+                "```\n\n"
+                "Middle text.\n\n"
+                "```mermaid\n"
+                "sequenceDiagram\nAlice->>Bob: Hi\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            out = Path(td) / "multi.html"
+            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
+            rc = self.mod.export_pdf_cmd(args)
+            self.assertEqual(rc, 0)
+            content = out.read_text(encoding="utf-8")
+            self.assertEqual(content.count("<svg"), 2)
+            self.assertNotIn("&lt;svg", content)
+
 
 if __name__ == "__main__":
     unittest.main()
