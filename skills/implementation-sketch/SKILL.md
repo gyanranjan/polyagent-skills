@@ -168,7 +168,7 @@ Update `agent.todo.md` using `common-skills/agent-todo-ledger.md`:
 Unless the user explicitly opts out, export a PDF copy of the implementation sketch:
 
 ```bash
-./scripts/md-to-pdf.sh implementation-sketch-<topic>.md implementation-sketch-<topic>.pdf
+polyagentctl export-pdf implementation-sketch-<topic>.md
 ```
 
 Add the generated PDF path to `agent.todo.md` gate evidence.

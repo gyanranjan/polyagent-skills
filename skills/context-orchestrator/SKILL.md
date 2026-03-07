@@ -68,16 +68,16 @@ Use `references/context-pack-template.md` and include:
 
 Update `agent.todo.md` using `common-skills/agent-todo-ledger.md` and scripts where available:
 
-- `scripts/sync-agent-todo.sh` for requirements/spec snapshots
-- `scripts/init-requirement-issues.sh` for REQ-to-GitHub issue bootstrap
+- `polyagentctl sync-todo` for requirements/spec snapshots
+- `polyagentctl init-issues` for REQ-to-GitHub issue bootstrap
 
 ### Step 4: Validate Context Pack Quality
 
 Run deterministic checks:
 
 ```bash
-scripts/verify-context-pack.sh context/pack.md
-scripts/design-readiness-check.sh --allow-open docs/specs/SPEC_TEMPLATE.md
+polyagentctl verify-context-pack context/pack.md
+polyagentctl design-check --allow-open docs/specs/SPEC_TEMPLATE.md
 ```
 
 If validation fails, keep context pack in draft status and list exact remediation items.
@@ -102,7 +102,7 @@ Add a short "Session Start" snippet at top of `context/pack.md`:
 - [ ] Includes at least one concrete `REQ-*` or explicit "missing requirements" note
 - [ ] Design readiness status is visible and current
 - [ ] Blockers and decisions are reflected in `agent.todo.md`
-- [ ] `scripts/verify-context-pack.sh` passes
+- [ ] `polyagentctl verify-context-pack context/pack.md` passes
 
 ## Common Skills Used
 

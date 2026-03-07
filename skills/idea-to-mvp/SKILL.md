@@ -326,7 +326,7 @@ A project directory named `<project-name>/` containing:
 - `docs/idea-to-mvp-<topic>.md` — the full MVP requirement document (structure from Step 9)
 - `docs/competitor-analysis.md` — detailed competitor research (if performed)
 
-Optionally, a PDF export with rendered mermaid diagrams (via `scripts/md-to-pdf.sh` or manual steps from `common-skills/mermaid-to-pdf.md`).
+Optionally, a PDF export with rendered mermaid diagrams (via `polyagentctl export-pdf docs/idea-to-mvp-<topic>.md`).
 
 ## Quality Checks
 

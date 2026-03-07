@@ -18,21 +18,21 @@ Apply these guidelines when:
 
 ## Default Workflow (Mandatory)
 
-Use `scripts/md-to-pdf.sh` as the canonical/default path for all Mermaid-to-PDF export.
+Use `polyagentctl export-pdf` as the canonical/default path for all Mermaid-to-PDF export.
 Do not create ad-hoc per-project converters unless explicitly requested.
 
-The script auto-selects the best available approach with this precedence:
+`polyagentctl export-pdf` auto-selects the best available approach with this precedence:
 
-1. **Path A (Preferred):** `mmdc` pre-render Mermaid blocks to images, then convert
-2. **Path B:** HTML render path (Mermaid JS) with automated PDF conversion where available
-3. **Fallback:** HTML artifact for manual browser print-to-PDF
+1. **Inline SVG (no tools needed):** `flowchart`, `erDiagram`, `sequenceDiagram` rendered to SVG in pure Python
+2. **Mermaid.js CDN:** all other diagram types rendered in a `<div class="mermaid">` block via CDN (requires browser/headless Chrome for PDF)
+3. **PDF via wkhtmltopdf or headless Chromium** — when available
+4. **Fallback:** HTML artifact for manual browser print-to-PDF
 
-This keeps one reliable implementation in the repository and avoids drift.
-For static flowchart/ER fallback rendering, `scripts/md-to-pdf.sh` uses reusable helper `scripts/md-to-pdf-renderer.py`.
+This keeps one reliable implementation in a single file (`scripts/polyagentctl.py`) with no shell dependencies.
 
 ## Strategy Details
 
-`scripts/md-to-pdf.sh` uses:
+`polyagentctl export-pdf` uses:
 
 ### Path A: Pre-Render Then Convert (Best Quality)
 
@@ -89,22 +89,23 @@ When writing Mermaid diagrams that will be exported to PDF, follow these rules:
 
 ## Conversion Process
 
-### Option A: Automated Script (`scripts/md-to-pdf.sh`) — Required Default
+### Option A: `polyagentctl export-pdf` — Required Default
 
 ```bash
-# Auto-selects best path (A or B) based on available tools
-./scripts/md-to-pdf.sh input.md output.pdf
+# Auto-selects best path based on available tools
+polyagentctl export-pdf input.md              # → input.pdf (or input.html as fallback)
 
-# Unified CLI wrapper (preferred for future tooling compatibility)
-./scripts/polyagentctl.py export-pdf input.md output.pdf
+# Force HTML output (useful in CI or when no PDF tool available)
+polyagentctl export-pdf input.md --html       # → input.html
 
-# Force HTML render path (no mmdc needed)
-./scripts/md-to-pdf.sh --html input.md output.html
+# Explicit output path
+polyagentctl export-pdf input.md output.pdf
 
-# The script auto-detects:
-# - mmdc available?        → Path A (pre-render to images)
-# - Chromium/puppeteer?    → Path B (HTML → headless browser → PDF)
-# - Nothing available?     → Fallback (HTML with live Mermaid for browser viewing)
+# The tool auto-detects:
+# - flowchart/erDiagram/sequenceDiagram → inline SVG (no external tools)
+# - other mermaid types                → Mermaid.js CDN div
+# - wkhtmltopdf or Chromium available? → PDF
+# - Nothing available?                 → HTML fallback
 ```
 
 ### Sandbox/Permission Guidance
@@ -185,13 +186,12 @@ pandoc input-with-images.md -o temp.html
 wkhtmltopdf --enable-local-file-access temp.html output.pdf
 ```
 
-### Option C: HTML Render Path (No mmdc, No PDF Engine)
+### Option C: HTML Render Path (No PDF Engine)
 
-When mmdc is not available, generate an HTML file with Mermaid JS that renders diagrams in the browser:
+When no PDF engine is available:
 
 ```bash
-# Generate HTML with live Mermaid diagrams
-./scripts/md-to-pdf.sh --html input.md output.html
+polyagentctl export-pdf input.md --html
 
 # Then either:
 # 1. Open output.html in a browser → diagrams render automatically
@@ -236,11 +236,11 @@ Save as `mermaid-pdf-config.json` and use: `mmdc -i input.mmd -o output.svg -c m
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| Diagram appears as raw code in PDF | Mermaid block not pre-rendered | Use `md-to-pdf.sh` (auto-selects best path) or use `--html` flag for browser-based rendering |
+| Diagram appears as raw code in PDF | Mermaid block not pre-rendered | Use `polyagentctl export-pdf` (auto-selects best path) or `--html` flag for browser-based rendering |
 | Diagram is blurry in PDF | PNG at low resolution | Use SVG instead, or PNG with `-s 2` or higher |
 | Diagram labels are clipped/overlapping | Labels too long or too many nodes | Shorten labels to < 40 chars, split diagram |
 | mmdc hangs or crashes | Chromium sandbox issue in container/CI | Use `mmdc --puppeteerConfigFile` with `{"args": ["--no-sandbox"]}` |
-| mmdc render stalls for too long | npx/tooling latency or blocked Chromium | Set `MMDC_TIMEOUT_SECONDS` (e.g. `MMDC_TIMEOUT_SECONDS=60 ./scripts/md-to-pdf.sh ...`) |
+| mmdc render stalls for too long | npx/tooling latency or blocked Chromium | Run `polyagentctl export-pdf --html` to bypass mmdc entirely |
 | Diagram renders but colors are too dark | Dark theme used | Use `-t neutral` or custom config above |
 | SVG not rendering in pandoc PDF | xelatex doesn't embed SVG natively | Convert SVG to PNG first: `inkscape -d 300 diagram.svg -o diagram.png`, or use `--pdf-engine=weasyprint` |
 

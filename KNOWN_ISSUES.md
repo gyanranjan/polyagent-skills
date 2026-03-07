@@ -50,7 +50,7 @@ Tracking known limitations, agent quirks, and workarounds.
 
 **Problem:** Skills pulled from skills.sh may contain Claude-specific syntax (tool references, slash commands, specific XML tags) that other agents don't understand.
 
-**Workaround:** After pulling a skill via `scripts/pull-skill.sh`, manually review and strip agent-specific syntax. The script flags potential issues but cannot auto-fix all of them.
+**Workaround:** After pulling a skill via `polyagentctl pull-skill`, manually review and strip agent-specific syntax. The command flags potential issues but cannot auto-fix all of them.
 
 ---
 
@@ -72,9 +72,9 @@ Tracking known limitations, agent quirks, and workarounds.
 **Severity:** High
 **Agents affected:** All
 
-**Problem:** Running `install-to-project.sh` will overwrite any existing `CLAUDE.md`, `AGENTS.md`, etc. in the target project.
+**Problem:** Running `polyagentctl install-project` will overwrite any existing `CLAUDE.md`, `AGENTS.md`, etc. in the target project.
 
-**Workaround:** The script now checks for existing files and creates `.polyagent-backup/` before overwriting. Still, review the merged output. Future: support merge mode.
+**Workaround:** The command checks for existing files and creates `.polyagent-backup/` before overwriting. Still, review the merged output. Future: support merge mode.
 
 ---
 
@@ -86,7 +86,7 @@ Tracking known limitations, agent quirks, and workarounds.
 
 **Problem:** Some portable `SKILL.md` files use multi-line YAML frontmatter (for example `description: >`). OpenClaw skill loading expects single-line frontmatter keys and may skip or misread such skills.
 
-**Workaround:** Use `scripts/install-global-all.sh` or `scripts/install-openclaw-global.sh` in `copy` mode. These normalize frontmatter when installing into `~/.openclaw/skills`.
+**Workaround:** Use `polyagentctl install-global copy`. This normalizes frontmatter when installing into `~/.openclaw/skills`.
 
 **Tracking:** Re-test with each OpenClaw update to determine if normalization can be removed.
 
@@ -100,13 +100,14 @@ Tracking known limitations, agent quirks, and workarounds.
 
 **Problem:** Standard Markdown-to-PDF converters (pandoc, markdown-pdf, etc.) do not natively render Mermaid codeblocks. This causes diagrams to either appear as raw code text in the PDF, be silently dropped, or render as low-resolution blurry images.
 
-**Solution:** `scripts/md-to-pdf.sh` now auto-selects the best available render path:
+**Solution:** `polyagentctl export-pdf` auto-selects the best available render path:
 
-- **Path A (mmdc available):** Pre-render Mermaid blocks to PNG, embed as images, convert to PDF via pandoc/wkhtmltopdf.
-- **Path B (no mmdc):** Generate self-contained HTML with Mermaid JS from CDN. Renders natively in-browser. Convert to PDF via headless Chromium or puppeteer. Use `--html` flag to force this path.
-- **Fallback:** Produces an HTML file with live Mermaid viewable in any browser. Print to PDF via Ctrl+P.
+- **Inline SVG (no tools needed):** `flowchart`, `erDiagram`, `sequenceDiagram` blocks rendered to SVG in pure Python.
+- **Mermaid.js CDN:** all other types wrapped in a `<div class="mermaid">` block rendered by the browser.
+- **PDF:** via wkhtmltopdf or headless Chromium when available.
+- **Fallback:** HTML with live Mermaid viewable in any browser. Use `--html` to force this path. Print to PDF via Ctrl+P.
 
-**Requirements (at least one of):** `mmdc` + pandoc (Path A) | Node.js + puppeteer or Chromium (Path B) | any browser (Fallback).
+**Requirements:** None for inline SVG diagrams (flowchart/erDiagram/sequenceDiagram). For PDF: `wkhtmltopdf` or Chromium. For other diagram types: any modern browser (Mermaid.js CDN). Check with `polyagentctl doctor`.
 
 **Tracking:** See `common-skills/mermaid-to-pdf.md` for full docs.
 

@@ -84,5 +84,5 @@ Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Sk
 Before opening or merging any PR, run:
 
 ```bash
-./scripts/polyagentctl.py check --strict --project .
+polyagentctl check --strict --project .
 ```

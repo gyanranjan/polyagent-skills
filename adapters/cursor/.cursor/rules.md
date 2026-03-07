@@ -38,5 +38,5 @@ Each skill directory contains a SKILL.md with: Purpose, When to Use, Inputs, Pro
 Before opening or merging any PR, run:
 
 ```bash
-./scripts/polyagentctl.py check --strict --project .
+polyagentctl check --strict --project .
 ```
