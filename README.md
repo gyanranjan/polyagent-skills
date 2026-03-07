@@ -29,15 +29,16 @@ Every AI coding agent has its own way of consuming instructions — `CLAUDE.md`,
 
 ## Supported Agents
 
-| Agent | Adapter File | Status |
-|-------|-------------|--------|
-| Claude Code | `CLAUDE.md` | ✅ Supported |
-| OpenAI Codex | `AGENTS.md` | ✅ Supported |
-| AWS Kiro | `.kiro/specs/` | ✅ Supported |
-| Google Gemini | `.gemini/instructions.md` | ✅ Supported |
-| OpenClaw | `~/.openclaw/skills/` | ✅ Supported |
-| Cursor | `.cursor/rules.md` | ✅ Supported |
-| Windsurf | `.windsurfrules` | 🟡 Planned |
+| Agent | Adapter File | Status | Notes |
+|-------|-------------|--------|-------|
+| Claude Code | `~/.claude/CLAUDE.md` | ✅ Supported | Reads filesystem directly; no extra step needed |
+| OpenAI Codex | `~/.codex/AGENTS.md` | ✅ Supported | |
+| AWS Kiro | `~/.kiro/specs/polyagent-skills.md` | ✅ Supported | |
+| Google Gemini Code Assist | `.gemini/instructions.md` | ✅ Supported | IDE integration; may need project-local install |
+| Google Gemini CLI | `~/.gemini/instructions.md` + native registry | ✅ Supported | Requires `gemini skills link` — handled automatically by `install-global` |
+| OpenClaw | `~/.openclaw/skills/` | ✅ Supported | |
+| Cursor | `.cursor/rules.md` | ✅ Supported | |
+| Windsurf | `.windsurfrules` | 🟡 Planned | |
 
 ## Quick Start
 
@@ -250,7 +251,6 @@ polyagent-skills/
 │   └── role-status.md
 │
 ├── tests/                     # Test suite
-│   ├── test_md_to_pdf_renderer.py
 │   └── test_polyagentctl.py
 │
 ├── projects/                  # Example and reference projects
@@ -322,6 +322,73 @@ polyagentctl pull-skill <skill-name-or-url>
 # Pre-PR quality gate
 polyagentctl check --strict --project .
 ```
+
+## Verifying Skills Per Agent
+
+After installing, use these checks to confirm each agent can see the skill library.
+
+### Claude Code
+
+Claude Code reads the filesystem directly using its tools. Ask it:
+
+> "What skills do you have available?"
+
+It should read `~/.claude/CLAUDE.md` and list the skills directory. No extra step needed.
+
+### Gemini CLI (`gemini`)
+
+Gemini CLI has **two layers** — a system prompt and a native skill registry. Both must be populated:
+
+```bash
+# Check what's registered in the native skill registry
+gemini skills list
+
+# Should show all 32 skills as [Enabled]. If not, re-run install:
+polyagentctl install-global link
+```
+
+Inside a `gemini` session, ask:
+
+> "What skills do you have available?"
+
+It should list all Active Skills including `idea-to-mvp`, `requirement-study`, etc.
+
+If you see only `skill-creator [Built-in]`, the native registry wasn't populated. Re-run `polyagentctl install-global`.
+
+### Gemini Code Assist (IDE)
+
+Check that `.gemini/instructions.md` exists in your project:
+
+```bash
+polyagentctl install-project . gemini
+cat .gemini/instructions.md
+```
+
+Then in the IDE chat ask: `"What skills do you have?"`. See [KI-003](KNOWN_ISSUES.md) if it doesn't respond to skills.
+
+### OpenAI Codex
+
+Check `~/.codex/AGENTS.md` exists and lists skills. Inside Codex, ask:
+
+> "List your available skills."
+
+### AWS Kiro
+
+Check `~/.kiro/specs/polyagent-skills.md` exists. In a Kiro session, ask:
+
+> "What skills are available to you?"
+
+See [KI-001](KNOWN_ISSUES.md) if Kiro loses context following multi-file reference chains.
+
+### Quick health check (all agents)
+
+```bash
+polyagentctl doctor           # checks prerequisites
+polyagentctl check --strict --project .   # validates project setup
+gemini skills list            # Gemini CLI specific
+```
+
+---
 
 ## License
 

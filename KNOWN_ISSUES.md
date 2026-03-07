@@ -113,6 +113,51 @@ Tracking known limitations, agent quirks, and workarounds.
 
 ---
 
+## KI-009: Gemini CLI has a separate native skill registry — instructions.md alone is not enough
+
+**Status:** Resolved
+**Severity:** High
+**Agents affected:** Gemini CLI (`gemini` command-line tool)
+
+**Problem:** The Gemini CLI (`@google/gemini-cli`) has two distinct configuration layers:
+
+1. `~/.gemini/instructions.md` — system prompt / global instructions (read automatically)
+2. A **native skill registry** — populated via `gemini skills link` or `gemini skills install`
+
+Writing skills into `instructions.md` alone causes Gemini CLI to report:
+
+> "I do not currently have a skill named idea-to-mvp in my local library; only skill-creator is available."
+
+Gemini CLI checks its native registry for named skills. If a skill isn't registered there, it falls back to its built-in `skill-creator`. It does NOT discover skills by browsing the filesystem path listed in `instructions.md`.
+
+**Root cause:** The `install-global` command was only writing `~/.gemini/instructions.md` and not registering skills with the native Gemini CLI skill registry.
+
+**Solution:** `polyagentctl install-global` now automatically runs `gemini skills link --consent` for every skill directory after writing config files, if `gemini` is found in PATH. This registers all polyagent skills into the Gemini CLI native registry so they appear as Active Skills.
+
+To manually re-register if needed:
+
+```bash
+polyagentctl install-global link   # re-runs everything including skill registration
+```
+
+Or register a single skill manually:
+
+```bash
+gemini skills link ~/.polyagent-skills/skills/idea-to-mvp --consent
+```
+
+Verify registration:
+
+```bash
+gemini skills list
+```
+
+**Note:** `~/.gemini/instructions.md` (the system prompt) is still written and still provides context. The native registry is an *additional* requirement for Gemini CLI to recognize named skills.
+
+**Tracking:** Re-verify with each `@google/gemini-cli` major release — the registry mechanism or file paths may change.
+
+---
+
 ## Adding a New Known Issue
 
 Use this format:
