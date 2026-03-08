@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime
 import html as html_mod
 import json
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+import urllib.parse
 import zipfile
 from pathlib import Path
 
@@ -657,11 +659,14 @@ def install_global_cmd(args: argparse.Namespace) -> int:
         print("  Install it with: npm install -g @google/gemini-cli@latest")
         print("  Then re-run: polyagentctl install-global")
 
+    installed_cli = _self_install_default()
+
     print()
     print("=== Done ===")
     print(f"Manifest: {manifest}")
-    print("Per-project installer: polyagentctl.py install-project <path> [agent]")
-    print("Uninstall safely with: polyagentctl.py uninstall-global --dry-run")
+    print(f"CLI installed: {installed_cli}")
+    print("Per-project installer: polyagentctl install-project <path> [agent]")
+    print("Uninstall safely with: polyagentctl uninstall-global --dry-run")
     return 0
 
 
@@ -1600,66 +1605,41 @@ def _render_sequence(code: str) -> str | None:
     return "".join(svg)
 
 
-def _mermaid_cdn_div(code: str) -> str:
-    """Wrap unrecognised mermaid code in a Mermaid.js CDN div (renders in browser/headless Chrome)."""
-    # Double newlines ensure markdown-it treats this as a block HTML element (not inline)
-    return f'\n\n<div class="mermaid">{html_mod.escape(code)}</div>\n\n'
+def _mermaid_ink_img(code: str) -> str:
+    """Render Mermaid code via static mermaid.ink image URL (URL-safe base64, no padding)."""
+    encoded = base64.urlsafe_b64encode(code.encode("utf-8")).decode("ascii").rstrip("=")
+    src = f"https://mermaid.ink/img/{urllib.parse.quote(encoded, safe='-_')}"
+    return (
+        "\n"
+        f'<div class="diagram diagram-image"><img src="{src}" alt="Mermaid diagram" loading="eager"/></div>'
+        "\n"
+    )
 
 
-_MERMAID_CDN_SCRIPT = (
-    '<script type="module">'
-    'import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";'
-    'mermaid.initialize({startOnLoad:true,theme:"neutral",securityLevel:"loose"});'
-    'mermaid.run().then(()=>document.body.setAttribute("data-mermaid-done","true"));'
-    '</script>'
-)
-
-
-def _extract_mermaid_blocks(markdown: str) -> tuple[str, dict, bool]:
-    """Replace mermaid fences with unique placeholders; return (patched_md, placeholder_map, has_cdn).
-
-    Placeholders prevent markdown-it from escaping raw HTML. After rendering
-    we swap placeholders back for real diagram HTML.
-    """
-    placeholders: dict[str, str] = {}
-    has_cdn_fallback = False
-    counter = [0]
-
+def _replace_mermaid_blocks(markdown: str) -> str:
     def repl(m: re.Match[str]) -> str:
-        nonlocal has_cdn_fallback
         code = m.group(1).strip()
         svg = _render_flowchart(code) or _render_er(code) or _render_sequence(code)
         token = f"MERMAID_BLOCK_{counter[0]}_PLACEHOLDER"
         counter[0] += 1
         if svg:
-            placeholders[token] = f'<div class="diagram">{svg}</div>'
-        else:
-            # Unknown diagram type: use Mermaid.js CDN div
-            has_cdn_fallback = True
-            placeholders[token] = f'<div class="mermaid">{html_mod.escape(code)}</div>'
-        return f"\n\n{token}\n\n"
+            return f'\n<div class="diagram">{svg}</div>\n'
+        # Unknown diagram type: fall back to static image rendering.
+        return _mermaid_ink_img(code)
 
-    patched = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL).sub(repl, markdown)
-    return patched, placeholders, has_cdn_fallback
+    result = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL).sub(repl, markdown)
+    return result
 
 
 def _render_to_html(source: str) -> str:
-    patched, placeholders, has_cdn_fallback = _extract_mermaid_blocks(source)
+    source = _replace_mermaid_blocks(source)
     try:
         from markdown_it import MarkdownIt
         md = MarkdownIt("default", {"html": True, "typographer": True})
         body = md.render(patched)
     except ImportError:
-        # Basic fallback: wrap paragraphs
-        body = "<pre>" + html_mod.escape(patched) + "</pre>"
-
-    # Swap placeholder tokens for the real HTML; markdown-it wraps them in <p>,
-    # so we strip the surrounding paragraph tags produced around each token.
-    for token, html_block in placeholders.items():
-        body = body.replace(f"<p>{token}</p>", html_block)
-        body = body.replace(token, html_block)  # fallback if <p> not added
-
-    cdn_script = _MERMAID_CDN_SCRIPT if has_cdn_fallback else ""
+        # Keep embedded HTML (diagrams/images) visible even without markdown-it.
+        body = source
     return f"""<!doctype html>
 <html>
 <head><meta charset="utf-8"/><title>Document Export</title>
@@ -1676,9 +1656,17 @@ th{{background:#f6f8fa}}
 blockquote{{border-left:4px solid #d0d7de;margin:0;padding-left:12px;color:#57606a}}
 .diagram{{margin:12px 0 20px;padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff}}
 .diagram svg{{max-width:100%;height:auto}}
-.mermaid{{margin:12px 0 20px;padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;text-align:center}}
+.diagram-image img{{max-width:100%;height:auto;display:block;margin:0 auto}}
 </style></head>
-<body>{body}{cdn_script}</body></html>"""
+<body>{body}</body></html>"""
+
+
+def _write_temp_html(html_content: str) -> tuple[Path, Path]:
+    """Write export HTML to a stable absolute temp directory and return (dir, html_path)."""
+    tmp_dir = Path(tempfile.mkdtemp(prefix="polyagentctl-export-"))
+    tmp_html = tmp_dir / "source.html"
+    tmp_html.write_text(html_content, encoding="utf-8")
+    return tmp_dir, tmp_html
 
 
 def export_pdf_cmd(args: argparse.Namespace) -> int:
@@ -1702,31 +1690,33 @@ def export_pdf_cmd(args: argparse.Namespace) -> int:
         print(f"HTML written: {output}")
         return 0
 
-    # Try PDF via wkhtmltopdf
-    if which("wkhtmltopdf"):
-        with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tf:
-            tf.write(html_content.encode("utf-8"))
-            tmp_html = tf.name
-        rc = run(["wkhtmltopdf", "--quiet", tmp_html, str(output)])
-        Path(tmp_html).unlink(missing_ok=True)
-        if rc == 0:
-            print(f"PDF written: {output}")
-            return 0
-
-    # Try PDF via headless Chromium
-    for browser in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable"):
-        if which(browser):
-            with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tf:
-                tf.write(html_content.encode("utf-8"))
-                tmp_html = tf.name
-            rc = run([
-                browser, "--headless", "--disable-gpu", "--no-sandbox",
-                f"--print-to-pdf={output}", f"file://{tmp_html}",
-            ])
-            Path(tmp_html).unlink(missing_ok=True)
+    tmp_dir, tmp_html = _write_temp_html(html_content)
+    tmp_url = tmp_html.resolve().as_uri()
+    try:
+        # Try PDF via wkhtmltopdf
+        if which("wkhtmltopdf"):
+            rc = run(["wkhtmltopdf", "--quiet", str(tmp_html.resolve()), str(output)])
             if rc == 0:
                 print(f"PDF written: {output}")
                 return 0
+
+        # Try PDF via headless Chromium
+        for browser in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable"):
+            if which(browser):
+                rc = run([
+                    browser,
+                    "--headless",
+                    "--disable-gpu",
+                    "--no-sandbox",
+                    "--allow-file-access-from-files",
+                    f"--print-to-pdf={output}",
+                    tmp_url,
+                ])
+                if rc == 0:
+                    print(f"PDF written: {output}")
+                    return 0
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     # Fallback: write HTML
     html_out = output.with_suffix(".html")
@@ -1755,6 +1745,14 @@ def self_install_cmd(args: argparse.Namespace) -> int:
         print(f"Installed: {md_to_pdf_target}")
 
     return 0
+
+
+def _self_install_default() -> Path:
+    target = (Path.home() / ".local/bin/polyagentctl").resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SCRIPT_DIR / "polyagentctl.py", target)
+    target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return target
 
 
 # ---------------------------------------------------------------------------
