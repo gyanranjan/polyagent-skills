@@ -97,10 +97,40 @@ def _has_py_pkg(import_name: str) -> bool:
 def _has_npm_pkg(pkg_name: str) -> bool:
     if not which("node"):
         return False
-    code, out = run_capture([
-        "node", "-e",
-        f"try{{require.resolve('{pkg_name}');console.log('yes')}}catch(e){{console.log('no')}}",
+
+    search_paths: list[str] = []
+    node_path = os.environ.get("NODE_PATH", "")
+    if node_path:
+        search_paths.extend([p for p in node_path.split(":" ) if p])
+
+    if which("npm"):
+        npm_code, npm_out = run_capture(["npm", "root", "-g"])
+        if npm_code == 0 and npm_out.strip():
+            search_paths.append(npm_out.strip())
+
+    # Common fallbacks for user-global installs.
+    home = str(Path.home())
+    search_paths.extend([
+        f"{home}/.npm-global/lib/node_modules",
+        f"{home}/.local/lib/node_modules",
     ])
+
+    unique_paths: list[str] = []
+    seen: set[str] = set()
+    for pth in search_paths:
+        if pth and pth not in seen:
+            seen.add(pth)
+            unique_paths.append(pth)
+
+    js = (
+        "const pkg=process.argv[1];"
+        "const paths=JSON.parse(process.argv[2]||'[]');"
+        "let ok=false;"
+        "try{require.resolve(pkg);ok=true}catch(e){}"
+        "if(!ok){for(const p of paths){try{require.resolve(pkg,{paths:[p]});ok=true;break}catch(e){}}}"
+        "console.log(ok?'yes':'no');"
+    )
+    code, out = run_capture(["node", "-e", js, pkg_name, json.dumps(unique_paths)])
     return code == 0 and out.strip() == "yes"
 
 
@@ -212,6 +242,39 @@ def _mark_dir_managed(dir_path: Path, managed_tag: str) -> None:
         f"{MANAGED_MARKER_KEY}: {managed_tag}\nsource-repo: {REPO_DIR}\n",
         encoding="utf-8",
     )
+
+
+def _install_md_to_pdf_wrapper(bin_dir: Path) -> None:
+    """Install md-to-pdf runner + wrapper that bootstraps NODE_PATH from npm root -g."""
+    md_to_pdf_src = SCRIPT_DIR / "md-to-pdf"
+    if not md_to_pdf_src.exists():
+        return
+
+    runner = bin_dir / "md-to-pdf.js"
+    shutil.copy2(md_to_pdf_src, runner)
+    runner.chmod(runner.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    wrapper = bin_dir / "md-to-pdf"
+    wrapper.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if command -v npm >/dev/null 2>&1; then
+  NPM_ROOT="$(npm root -g 2>/dev/null || true)"
+  if [ -n "${NPM_ROOT}" ]; then
+    if [ -n "${NODE_PATH:-}" ]; then
+      export NODE_PATH="${NPM_ROOT}:${NODE_PATH}"
+    else
+      export NODE_PATH="${NPM_ROOT}"
+    fi
+  fi
+fi
+exec node "${SCRIPT_DIR}/md-to-pdf.js" "$@"
+""",
+        encoding="utf-8",
+    )
+    wrapper.chmod(wrapper.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
 
 
 def _parse_skill_frontmatter(skill_md: Path) -> tuple[str, str]:
@@ -1682,13 +1745,10 @@ def self_install_cmd(args: argparse.Namespace) -> int:
     target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     print(f"Installed: {target}")
 
-    # Also install the standalone md-to-pdf companion tool
-    md_to_pdf_src = SCRIPT_DIR / "md-to-pdf"
-    if md_to_pdf_src.exists():
-        md_to_pdf_target = target.parent / "md-to-pdf"
-        shutil.copy2(md_to_pdf_src, md_to_pdf_target)
-        md_to_pdf_target.chmod(md_to_pdf_target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        print(f"Installed: {md_to_pdf_target}")
+    # Also install md-to-pdf wrapper + runner companion tool
+    _install_md_to_pdf_wrapper(target.parent)
+    if (target.parent / "md-to-pdf").exists():
+        print(f"Installed: {target.parent / 'md-to-pdf'}")
 
     return 0
 
@@ -1699,12 +1759,8 @@ def _self_install_default() -> Path:
     shutil.copy2(SCRIPT_DIR / "polyagentctl.py", target)
     target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
-    # Also install the standalone md-to-pdf companion tool
-    md_to_pdf_src = SCRIPT_DIR / "md-to-pdf"
-    if md_to_pdf_src.exists():
-        md_to_pdf_target = target.parent / "md-to-pdf"
-        shutil.copy2(md_to_pdf_src, md_to_pdf_target)
-        md_to_pdf_target.chmod(md_to_pdf_target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    # Also install md-to-pdf wrapper + runner companion tool
+    _install_md_to_pdf_wrapper(target.parent)
 
     return target
 

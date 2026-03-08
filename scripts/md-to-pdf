@@ -42,13 +42,69 @@ function findFirstBinary(candidates) {
   return null;
 }
 
-function hasModule(mod) {
-  try {
-    require.resolve(mod);
-    return true;
-  } catch (_) {
-    return false;
+function unique(arr) {
+  const seen = new Set();
+  const out = [];
+  for (const v of arr) {
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
   }
+  return out;
+}
+
+function candidateModulePaths() {
+  const paths = [];
+
+  if (process.env.NODE_PATH) {
+    for (const p of process.env.NODE_PATH.split(path.delimiter)) {
+      if (p) paths.push(p);
+    }
+  }
+
+  const npmRoot = run('npm', ['root', '-g']);
+  if (npmRoot.status === 0) {
+    const p = (npmRoot.stdout || '').trim();
+    if (p) paths.push(p);
+  }
+
+  // Common fallback for npm global installs under user home.
+  const home = process.env.HOME || os.homedir();
+  if (home) {
+    paths.push(path.join(home, '.npm-global', 'lib', 'node_modules'));
+    paths.push(path.join(home, '.local', 'lib', 'node_modules'));
+  }
+
+  return unique(paths);
+}
+
+function resolveModulePath(mod) {
+  try {
+    return require.resolve(mod);
+  } catch (_) {
+    // fall through
+  }
+
+  for (const base of candidateModulePaths()) {
+    try {
+      return require.resolve(mod, { paths: [base] });
+    } catch (_) {
+      // try next
+    }
+  }
+  return null;
+}
+
+function hasModule(mod) {
+  return Boolean(resolveModulePath(mod));
+}
+
+function loadModule(mod) {
+  const resolved = resolveModulePath(mod);
+  if (!resolved) {
+    throw new Error(`Missing Node dependency: ${mod}. Install with: npm install -g ${mod}`);
+  }
+  return require(resolved);
 }
 
 function decodeEntities(text) {
@@ -78,12 +134,7 @@ function replaceMermaidBlocks(html) {
 }
 
 function renderHtml(mdContent) {
-  let MarkdownIt;
-  try {
-    MarkdownIt = require('markdown-it');
-  } catch (err) {
-    throw new Error('Missing Node dependency: markdown-it. Run: npm install -g markdown-it');
-  }
+  const MarkdownIt = loadModule('markdown-it');
 
   const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
   let body = md.render(mdContent);
@@ -134,8 +185,10 @@ function chromiumArgs(outputPath, fileUrl) {
 }
 
 function resolvePuppeteerModule() {
-  if (hasModule('puppeteer')) return 'puppeteer';
-  if (hasModule('puppeteer-core')) return 'puppeteer-core';
+  const pp = resolveModulePath('puppeteer');
+  if (pp) return { name: 'puppeteer', resolved: pp };
+  const ppc = resolveModulePath('puppeteer-core');
+  if (ppc) return { name: 'puppeteer-core', resolved: ppc };
   return null;
 }
 
@@ -148,7 +201,7 @@ function tryPuppeteer(htmlPath, outputPath) {
 
   const js = `
     (async () => {
-      const puppeteer = require(${JSON.stringify(mod)});
+      const puppeteer = require(${JSON.stringify(mod.resolved)});
       const browser = await puppeteer.launch({
         executablePath: ${JSON.stringify(exe)},
         headless: 'new',
@@ -205,6 +258,8 @@ function doctor(jsonOut) {
   const wkhtmltopdf = findFirstBinary(['wkhtmltopdf']);
   const missingLibs = chromiumMissingLibs(chromePath);
 
+  const npmGlobalRootResult = run('npm', ['root', '-g']);
+  const npmGlobalRoot = npmGlobalRootResult.status === 0 ? (npmGlobalRootResult.stdout || '').trim() : null;
   const payload = {
     node: nodeVersion,
     markdown_it: markdownIt,
@@ -212,6 +267,8 @@ function doctor(jsonOut) {
     chromium: chromePath || null,
     wkhtmltopdf: wkhtmltopdf || null,
     chromium_missing_libs: missingLibs,
+    npm_global_root: npmGlobalRoot || null,
+    module_search_paths: candidateModulePaths(),
   };
 
   if (jsonOut) {
@@ -222,6 +279,7 @@ function doctor(jsonOut) {
   console.log('=== md-to-pdf doctor ===');
   console.log(`node: ${nodeVersion}`);
   console.log(`markdown-it: ${markdownIt ? 'yes' : 'no (npm i -g markdown-it)'}`);
+  console.log(`module search paths: ${candidateModulePaths().join(', ') || '(none)'}`);
   console.log(`puppeteer/puppeteer-core: ${puppeteer ? 'yes' : 'no (optional)'}`);
   console.log(`chromium: ${chromePath || 'not found'}`);
   console.log(`wkhtmltopdf: ${wkhtmltopdf || 'not found'}`);
