@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""md-to-pdf — convert Markdown files containing Mermaid diagrams to PDF or HTML.
+
+Usage:
+  md-to-pdf input.md                 # → input.pdf (or input.html as fallback)
+  md-to-pdf input.md --html          # → input.html (force HTML)
+  md-to-pdf input.md output.pdf      # explicit output path
+  md-to-pdf input.md output.html     # explicit HTML output
+
+Rendering precedence:
+  1. Inline SVG  — flowchart, erDiagram, sequenceDiagram (no external tools needed)
+  2. Mermaid.js CDN div — all other mermaid types (browser/headless Chrome renders)
+  3. PDF via wkhtmltopdf
+  4. PDF via headless Chromium / Google Chrome
+  5. Fallback: HTML file (open in browser → Ctrl+P to print to PDF)
+
+This is a standalone companion to `polyagentctl export-pdf`. Both tools share the
+same rendering logic. Install both with:  polyagentctl self-install
+"""
+from __future__ import annotations
+
+import argparse
+import html as html_mod
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _which(name: str) -> str | None:
+    return shutil.which(name)
+
+
+def _run(cmd: list[str]) -> int:
+    return subprocess.run(cmd).returncode
+
+
+def _esc(s: str) -> str:
+    return html_mod.escape(s, quote=True)
+
+
+# ---------------------------------------------------------------------------
+# Inline SVG renderers (no external tools required)
+# ---------------------------------------------------------------------------
+
+def _render_flowchart(code: str) -> str | None:
+    lines = [ln.strip() for ln in code.splitlines() if ln.strip()]
+    if not lines or not lines[0].startswith("flowchart"):
+        return None
+    first = lines[0].split()
+    direction = first[1] if len(first) > 1 else "TD"
+    node_labels: dict[str, str] = {}
+    node_order: list[str] = []
+    edges: list[tuple[str, str]] = []
+    node_re = re.compile(r"^([A-Za-z0-9_]+)\[(.*?)\]$")
+    edge_re = re.compile(r"^([A-Za-z0-9_]+)(?:\[(.*?)\])?\s*-->\s*([A-Za-z0-9_]+)(?:\[(.*?)\])?$")
+
+    def ensure(nid: str, label: str | None = None) -> None:
+        if nid not in node_labels:
+            node_labels[nid] = label or nid
+            node_order.append(nid)
+        elif label:
+            node_labels[nid] = label
+
+    for ln in lines[1:]:
+        m = edge_re.match(ln)
+        if m:
+            a, al, b, bl = m.groups()
+            ensure(a, al); ensure(b, bl); edges.append((a, b))
+            continue
+        m = node_re.match(ln)
+        if m:
+            ensure(m.group(1), m.group(2))
+    if not node_order:
+        return None
+    W, H, G = 220, 56, 44
+    horiz = direction in ("LR", "RL")
+    coords = {nid: (50 + i * (W + G), 60) if horiz else (60, 40 + i * (H + G)) for i, nid in enumerate(node_order)}
+    sw = max(420, 100 + len(node_order) * (W + G)) if horiz else 420
+    sh = 200 if horiz else max(220, 100 + len(node_order) * (H + G))
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{sw}" height="{sh}" viewBox="0 0 {sw} {sh}">',
+         '<defs><marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#4b5563"/></marker></defs>',
+         '<rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>']
+    for a, b in edges:
+        ax, ay = coords[a]; bx, by = coords[b]
+        x1, y1 = (ax + W, ay + H // 2) if horiz else (ax + W // 2, ay + H)
+        x2, y2 = (bx, by + H // 2) if horiz else (bx + W // 2, by)
+        p.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#4b5563" stroke-width="2" marker-end="url(#arr)"/>')
+    for nid in node_order:
+        x, y = coords[nid]
+        p.append(f'<rect x="{x}" y="{y}" rx="8" ry="8" width="{W}" height="{H}" fill="#f8fafc" stroke="#334155"/>')
+        p.append(f'<text x="{x + W/2}" y="{y + H/2 + 4}" text-anchor="middle" font-size="13" font-family="Arial" fill="#111827">{_esc(node_labels[nid])}</text>')
+    p.append("</svg>")
+    return "".join(p)
+
+
+def _render_er(code: str) -> str | None:
+    lines = [ln.strip() for ln in code.splitlines() if ln.strip()]
+    if not lines or lines[0] != "erDiagram":
+        return None
+    rel_re = re.compile(r"^([A-Za-z0-9_]+)\s+\S+\s+([A-Za-z0-9_]+)\s*:\s*(.+)$")
+    entities: list[str] = []
+    rels: list[tuple[str, str, str]] = []
+    for ln in lines[1:]:
+        m = rel_re.match(ln)
+        if not m:
+            continue
+        a, b, label = m.groups()
+        for e in (a, b):
+            if e not in entities:
+                entities.append(e)
+        rels.append((a, b, label))
+    if not entities:
+        return None
+    W, H, CG, RG, COLS = 220, 54, 120, 50, 2
+    coords = {e: (60 + (i % COLS) * (W + CG), 40 + (i // COLS) * (H + RG)) for i, e in enumerate(entities)}
+    rows = (len(entities) + COLS - 1) // COLS
+    sw = 60 + COLS * W + (COLS - 1) * CG + 60
+    sh = 60 + rows * H + (rows - 1) * RG + 60
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{sw}" height="{sh}" viewBox="0 0 {sw} {sh}">',
+         '<rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>']
+    for a, b, label in rels:
+        ax, ay = coords[a]; bx, by = coords[b]
+        x1, y1, x2, y2 = ax + W/2, ay + H/2, bx + W/2, by + H/2
+        mx, my = (x1+x2)/2, (y1+y2)/2
+        p.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#4b5563" stroke-width="2"/>')
+        p.append(f'<text x="{mx}" y="{my-6}" text-anchor="middle" font-size="12" font-family="Arial" fill="#374151">{_esc(label)}</text>')
+    for e in entities:
+        x, y = coords[e]
+        p.append(f'<rect x="{x}" y="{y}" rx="8" ry="8" width="{W}" height="{H}" fill="#f8fafc" stroke="#334155"/>')
+        p.append(f'<text x="{x + W/2}" y="{y + H/2 + 4}" text-anchor="middle" font-size="13" font-family="Arial" fill="#111827">{_esc(e)}</text>')
+    p.append("</svg>")
+    return "".join(p)
+
+
+def _render_sequence(code: str) -> str | None:
+    lines = [ln.strip() for ln in code.splitlines() if ln.strip()]
+    if not lines or lines[0] != "sequenceDiagram":
+        return None
+    participants: list[str] = []
+    messages: list[tuple[str, str, str, bool]] = []
+
+    def ensure(name: str) -> None:
+        if name not in participants:
+            participants.append(name)
+
+    msg_re = re.compile(r"^(.+?)\s*(-->>|->>|-->|->|-x|--x)\s*(.+?)\s*:\s*(.*)$")
+    for ln in lines[1:]:
+        low = ln.lower()
+        if low.startswith("participant ") or low.startswith("actor "):
+            ensure(ln.split(None, 1)[1].strip())
+            continue
+        m = msg_re.match(ln)
+        if m:
+            frm, arrow, to, label = m.group(1).strip(), m.group(2), m.group(3).strip(), m.group(4).strip()
+            ensure(frm); ensure(to)
+            messages.append((frm, to, label, arrow.startswith("--")))
+    if not participants:
+        return None
+    BW, BH, GAP = 120, 36, 80
+    TOP, MSG_H = 20, 44
+    n = len(participants)
+    total_w = max(300, 40 + n * (BW + GAP))
+    total_h = TOP + BH + max(1, len(messages)) * MSG_H + 40
+    cx = {p: 20 + i * (BW + GAP) + BW // 2 for i, p in enumerate(participants)}
+    line_y0 = TOP + BH
+    line_y1 = total_h - 20
+    svg: list[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{total_w}" height="{total_h}" viewBox="0 0 {total_w} {total_h}">',
+        '<defs><marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">'
+        '<polygon points="0 0, 10 3.5, 0 7" fill="#4b5563"/></marker></defs>',
+        '<rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>',
+    ]
+    for name in participants:
+        x = cx[name] - BW // 2
+        svg.append(f'<rect x="{x}" y="{TOP}" rx="4" ry="4" width="{BW}" height="{BH}" fill="#f8fafc" stroke="#334155"/>')
+        svg.append(f'<text x="{cx[name]}" y="{TOP + BH // 2 + 5}" text-anchor="middle" font-size="12" font-family="Arial" fill="#111827">{_esc(name)}</text>')
+        svg.append(f'<line x1="{cx[name]}" y1="{line_y0}" x2="{cx[name]}" y2="{line_y1}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3"/>')
+    for i, (frm, to, label, dashed) in enumerate(messages):
+        y = line_y0 + (i + 0.7) * MSG_H
+        x1, x2 = cx[frm], cx[to]
+        dash = ' stroke-dasharray="6 3"' if dashed else ''
+        svg.append(f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#4b5563" stroke-width="1.5"{dash} marker-end="url(#arr)"/>')
+        svg.append(f'<text x="{(x1 + x2) / 2}" y="{y - 5}" text-anchor="middle" font-size="11" font-family="Arial" fill="#374151">{_esc(label)}</text>')
+    svg.append("</svg>")
+    return "".join(svg)
+
+
+# ---------------------------------------------------------------------------
+# Mermaid block processing
+# ---------------------------------------------------------------------------
+
+_MERMAID_CDN_SCRIPT = (
+    '<script type="module">'
+    'import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";'
+    'mermaid.initialize({startOnLoad:true,theme:"neutral",securityLevel:"loose"});'
+    'mermaid.run().then(()=>document.body.setAttribute("data-mermaid-done","true"));'
+    '</script>'
+)
+
+
+def _extract_mermaid_blocks(markdown: str) -> tuple[str, dict[str, str], bool]:
+    """Replace mermaid fences with unique placeholders; return (patched_md, placeholder_map, has_cdn).
+
+    We use placeholders instead of raw HTML so that markdown-it never sees the
+    SVG/div markup and cannot accidentally escape it.  After markdown-it renders
+    the rest of the document we swap the placeholders back for real HTML.
+    """
+    placeholders: dict[str, str] = {}
+    has_cdn_fallback = False
+    counter = [0]
+
+    def repl(m: re.Match[str]) -> str:
+        nonlocal has_cdn_fallback
+        code = m.group(1).strip()
+        svg = _render_flowchart(code) or _render_er(code) or _render_sequence(code)
+        token = f"MERMAID_BLOCK_{counter[0]}_PLACEHOLDER"
+        counter[0] += 1
+        if svg:
+            placeholders[token] = f'<div class="diagram">{svg}</div>'
+        else:
+            has_cdn_fallback = True
+            placeholders[token] = f'<div class="mermaid">{html_mod.escape(code)}</div>'
+        # Surround with blank lines so markdown-it treats it as a paragraph break
+        return f"\n\n{token}\n\n"
+
+    patched = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL).sub(repl, markdown)
+    return patched, placeholders, has_cdn_fallback
+
+
+# ---------------------------------------------------------------------------
+# HTML rendering
+# ---------------------------------------------------------------------------
+
+def _render_to_html(source: str) -> str:
+    patched, placeholders, has_cdn_fallback = _extract_mermaid_blocks(source)
+    try:
+        from markdown_it import MarkdownIt
+        md = MarkdownIt("default", {"html": True, "typographer": True})
+        body = md.render(patched)
+    except ImportError:
+        body = "<pre>" + html_mod.escape(patched) + "</pre>"
+
+    # Swap placeholder tokens for the real HTML; markdown-it wraps them in <p>,
+    # so we strip the surrounding paragraph tags produced around each token.
+    for token, html_block in placeholders.items():
+        body = body.replace(f"<p>{token}</p>", html_block)
+        body = body.replace(token, html_block)  # fallback if <p> not added
+
+    cdn_script = _MERMAID_CDN_SCRIPT if has_cdn_fallback else ""
+    return f"""<!doctype html>
+<html>
+<head><meta charset="utf-8"/><title>Document Export</title>
+<style>
+body{{font-family:Arial,sans-serif;margin:28px;color:#111;line-height:1.5}}
+h1,h2,h3{{margin-top:1.2em;margin-bottom:.5em}}
+h1{{border-bottom:1px solid #ddd;padding-bottom:.25em}}
+code{{background:#f6f8fa;padding:.1em .3em;border-radius:4px}}
+pre{{background:#f6f8fa;border:1px solid #e5e7eb;border-radius:6px;padding:12px;font-size:12px;overflow-x:auto}}
+pre code{{background:transparent;padding:0}}
+table{{border-collapse:collapse;width:100%;margin:12px 0;font-size:12px}}
+th,td{{border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top}}
+th{{background:#f6f8fa}}
+blockquote{{border-left:4px solid #d0d7de;margin:0;padding-left:12px;color:#57606a}}
+.diagram{{margin:12px 0 20px;padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff}}
+.diagram svg{{max-width:100%;height:auto}}
+.mermaid{{margin:12px 0 20px;padding:10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;text-align:center}}
+@media print{{body{{margin:0}} .diagram,.mermaid{{break-inside:avoid}}}}
+</style></head>
+<body>{body}{cdn_script}</body></html>"""
+
+
+# ---------------------------------------------------------------------------
+# Main conversion logic
+# ---------------------------------------------------------------------------
+
+def convert(input_md: Path, output: Path | None, force_html: bool) -> int:
+    if not input_md.exists():
+        print(f"Error: file not found: {input_md}", file=sys.stderr)
+        return 1
+
+    if output is None:
+        output = input_md.with_suffix(".html" if force_html else ".pdf")
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    source = input_md.read_text(encoding="utf-8")
+    html_content = _render_to_html(source)
+
+    if force_html or output.suffix.lower() == ".html":
+        output.write_text(html_content, encoding="utf-8")
+        print(f"HTML written: {output}")
+        return 0
+
+    # Try PDF via wkhtmltopdf
+    if _which("wkhtmltopdf"):
+        with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tf:
+            tf.write(html_content.encode("utf-8"))
+            tmp_html = tf.name
+        rc = _run(["wkhtmltopdf", "--quiet", tmp_html, str(output)])
+        Path(tmp_html).unlink(missing_ok=True)
+        if rc == 0:
+            print(f"PDF written: {output}")
+            return 0
+
+    # Try PDF via headless Chromium / Chrome
+    for browser in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable"):
+        if _which(browser):
+            with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tf:
+                tf.write(html_content.encode("utf-8"))
+                tmp_html = tf.name
+            rc = _run([
+                browser, "--headless", "--disable-gpu", "--no-sandbox",
+                f"--print-to-pdf={output}", f"file://{tmp_html}",
+            ])
+            Path(tmp_html).unlink(missing_ok=True)
+            if rc == 0:
+                print(f"PDF written: {output}")
+                return 0
+
+    # Fallback: HTML
+    html_out = output.with_suffix(".html")
+    html_out.write_text(html_content, encoding="utf-8")
+    print(f"No PDF tool found (wkhtmltopdf/chromium). HTML written: {html_out}")
+    print("Open in a browser and use Ctrl+P / Cmd+P to print to PDF.")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main() -> int:
+    p = argparse.ArgumentParser(
+        prog="md-to-pdf",
+        description="Convert Markdown with Mermaid diagrams to PDF or HTML.",
+        epilog=(
+            "Install to PATH:  polyagentctl self-install\n"
+            "Identical tool:   polyagentctl export-pdf"
+        ),
+    )
+    p.add_argument("input_md", help="Input Markdown file")
+    p.add_argument("output", nargs="?", help="Output file (.pdf or .html). Auto-detected if omitted.")
+    p.add_argument("--html", action="store_true", help="Force HTML output even when PDF tools are available")
+    args = p.parse_args()
+    return convert(
+        Path(args.input_md),
+        Path(args.output) if args.output else None,
+        args.html,
+    )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1617,9 +1617,12 @@ def _mermaid_ink_img(code: str) -> str:
 
 
 def _replace_mermaid_blocks(markdown: str) -> str:
+    counter = [0]
+
     def repl(m: re.Match[str]) -> str:
         code = m.group(1).strip()
         svg = _render_flowchart(code) or _render_er(code) or _render_sequence(code)
+        counter[0] += 1
         if svg:
             return f'\n<div class="diagram">{svg}</div>\n'
         # Unknown diagram type: fall back to static image rendering.
@@ -1733,6 +1736,15 @@ def self_install_cmd(args: argparse.Namespace) -> int:
     shutil.copy2(SCRIPT_DIR / "polyagentctl.py", target)
     target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     print(f"Installed: {target}")
+
+    # Also install the standalone md-to-pdf companion tool
+    md_to_pdf_src = SCRIPT_DIR / "md-to-pdf"
+    if md_to_pdf_src.exists():
+        md_to_pdf_target = target.parent / "md-to-pdf"
+        shutil.copy2(md_to_pdf_src, md_to_pdf_target)
+        md_to_pdf_target.chmod(md_to_pdf_target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        print(f"Installed: {md_to_pdf_target}")
+
     return 0
 
 
