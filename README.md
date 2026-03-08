@@ -40,7 +40,7 @@ Every AI coding agent has its own way of consuming instructions — `CLAUDE.md`,
 | Cursor | `.cursor/rules.md` | ✅ Supported | |
 | Windsurf | `.windsurfrules` | 🟡 Planned | |
 
-## Quick Start
+# Quick Start
 
 ```bash
 # Clone the repo
@@ -51,14 +51,19 @@ cd polyagent-skills
 python3 scripts/polyagentctl.py doctor --fix
 
 # One-time global install (Claude Code + Codex + Kiro + Gemini + OpenClaw)
+# This also installs polyagentctl and md-to-pdf to ~/.local/bin/
 python3 scripts/polyagentctl.py install-global copy
 
-# `install-global` also installs ~/.local/bin/polyagentctl
-polyagentctl doctor   # now available globally
+# Ensure ~/.local/bin is in your PATH
+export PATH="$HOME/.local/bin:$PATH"  # Add to your .bashrc or .zshrc
+
+# polyagentctl and md-to-pdf are now available globally
+polyagentctl doctor
+md-to-pdf --help
 
 # (Optional) explicit reinstall to PATH
 python3 scripts/polyagentctl.py self-install
-
+```
 # Project install
 polyagentctl install-project /path/to/my-project all
 polyagentctl install-project /path/to/my-project claude-code

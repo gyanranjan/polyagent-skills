@@ -77,6 +77,7 @@ _DOCTOR_PY_PKGS = [
 # (require_name, label, npm_package)
 _DOCTOR_NPM_PKGS = [
     ("puppeteer", "puppeteer (headless PDF)", "puppeteer"),
+    ("markdown-it", "markdown-it (markdown parser)", "markdown-it"),
 ]
 
 _INSTALL_HINTS = {
@@ -1753,6 +1754,14 @@ def _self_install_default() -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(SCRIPT_DIR / "polyagentctl.py", target)
     target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    # Also install the standalone md-to-pdf companion tool
+    md_to_pdf_src = SCRIPT_DIR / "md-to-pdf"
+    if md_to_pdf_src.exists():
+        md_to_pdf_target = target.parent / "md-to-pdf"
+        shutil.copy2(md_to_pdf_src, md_to_pdf_target)
+        md_to_pdf_target.chmod(md_to_pdf_target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
     return target
 
 
