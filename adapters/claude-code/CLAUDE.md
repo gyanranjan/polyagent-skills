@@ -79,9 +79,22 @@ Shared conventions are in `common-skills/`. Apply them when referenced by a skil
 - `skills/visionary-futurist/` — Long-horizon technology trajectories and second-order consequences
 - `skills/quantitative-sanity-checker/` — Back-of-the-envelope arithmetic to sanity-check claims and forecasts
 
+## Pre-Delivery Review Panel (MANDATORY)
+
+**Before declaring any gate as passed or delivering a major document, automatically run three review lenses.**
+
+Read `common-skills/pre-delivery-review-panel.md` for the full protocol. Quick summary:
+
+1. **Expert Spot-Check** — Domain sanity: are claims evidence-backed? Any practitioner-level gotchas?
+2. **Devil's Advocate Challenge** — Strongest counterargument, hidden assumptions, premature consensus
+3. **Quantitative Sanity Check** — Do the numbers survive back-of-the-envelope arithmetic against base rates?
+
+Append a `### Review Panel` section with flags from each lens and a verdict (Clear / Flags to discuss / Revise before proceeding). **Do not say "ready for next step" or present a deliverable without this panel attached.**
+
 ## Common Skills
 
 - `common-skills/development-lifecycle-gates.md` — Gated development process (read first for any build task)
+- `common-skills/pre-delivery-review-panel.md` — Automatic expert + devil's advocate + quantitative review before gate transitions
 - `common-skills/design-readiness-gate.md` — Pre-coding architecture checklist
 - `common-skills/agent-todo-ledger.md` — Cross-session task tracking
 - `common-skills/document-tail-sections.md` — Standard document endings

@@ -283,13 +283,27 @@ This gate system orchestrates existing skills — it does not replace them:
 
 | Gate | Skill(s) Used | Common Skills Applied |
 |------|--------------|----------------------|
-| G0 | `idea-to-mvp` | `output-formatting`, `quality-checklist` |
-| G1 | `requirement-study` | `design-readiness-gate`, `agent-todo-ledger`, `quality-checklist` |
-| G2 | `implementation-sketch` | `design-readiness-gate`, `agent-todo-ledger`, `quality-checklist` |
-| G3 | `poc-spike` | `agent-todo-ledger`, `quality-checklist` |
+| G0 | `idea-to-mvp` | `output-formatting`, `quality-checklist`, `pre-delivery-review-panel` |
+| G1 | `requirement-study` | `design-readiness-gate`, `agent-todo-ledger`, `quality-checklist`, `pre-delivery-review-panel` |
+| G2 | `implementation-sketch` | `design-readiness-gate`, `agent-todo-ledger`, `quality-checklist`, `pre-delivery-review-panel` |
+| G3 | `poc-spike` | `agent-todo-ledger`, `quality-checklist`, `pre-delivery-review-panel` |
 | G4 | (coding) | `quality-checklist` |
-| G5 | (review) | `quality-checklist` |
+| G5 | (review) | `quality-checklist`, `pre-delivery-review-panel` |
 | G6 | `remote-ops` | `agent-todo-ledger` |
+
+## Pre-Delivery Review Panel (Mandatory)
+
+**Before declaring any gate as passed or delivering a major document, run the review panel.**
+
+Read `common-skills/pre-delivery-review-panel.md` for the full process. The short version:
+
+1. **Expert Spot-Check** — Are claims evidence-backed? Any domain gotchas missed?
+2. **Devil's Advocate Challenge** — What's the strongest argument against this? Hidden assumptions?
+3. **Quantitative Sanity Check** — Do the numbers survive a back-of-the-envelope test?
+
+Append a `### Review Panel` section to every gate-transition message or major deliverable with the results of all three lenses and a verdict (Clear / Flags to discuss / Revise before proceeding).
+
+**Exception:** Trivial changes fast-tracked to Gate 4 skip this panel.
 
 ## Quality Checks
 
@@ -300,3 +314,5 @@ This gate system orchestrates existing skills — it does not replace them:
 - [ ] Agent warns (once, concisely) before honoring a skip request
 - [ ] User-facing responses include `Stage` and `Next` status line
 - [ ] Requirements/design artifacts include Mermaid diagrams and shareable PDF by default
+- [ ] Pre-delivery review panel was run before declaring a gate as passed
+- [ ] Review panel verdict is attached to the deliverable or gate-transition message

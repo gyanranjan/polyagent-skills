@@ -71,6 +71,7 @@ Gates are mandatory by default. Check `agent.todo.md` for gate status. Start at 
 ## Common Skills
 
 - `common-skills/development-lifecycle-gates.md` — Gated development process
+- `common-skills/pre-delivery-review-panel.md` — Automatic expert + devil's advocate + quantitative review before gate transitions
 - `common-skills/design-readiness-gate.md` — Pre-coding architecture checklist
 - `common-skills/agent-todo-ledger.md` — Cross-session task tracking
 - `common-skills/document-tail-sections.md` — Standard document endings

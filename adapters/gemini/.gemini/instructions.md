@@ -29,7 +29,7 @@ Gates are mandatory by default. Check `agent.todo.md` for gate status. Start at 
 
 Available skills: idea-to-mvp (Gate 0), requirement-study (Gate 1), implementation-sketch (Gate 2), poc-spike (Gate 3), mail-summarizer, document-analyzer, deck-creator, repo-bootstrap, agent-writer, desensitizer, remote-ops, expert-research, context-orchestrator, automation-architect, business-strategist, customer-advocate, devils-advocate, engineering-team, entrepreneur, growth-engineer, historian-knowledge-curator, ideator, operations-commander, product-manager, qa-validator, research-analyst, role-orchestrator, security-guardian, subject-matter-expert, systems-architect, systems-simplifier, visionary-futurist, quantitative-sanity-checker.
 
-Key common-skills: development-lifecycle-gates, design-readiness-gate, agent-todo-ledger, quality-checklist, output-formatting.
+Key common-skills: development-lifecycle-gates, pre-delivery-review-panel, design-readiness-gate, agent-todo-ledger, quality-checklist, output-formatting.
 
 Each skill directory contains a SKILL.md with: Purpose, When to Use, Inputs, Process steps, Output Format.
 
