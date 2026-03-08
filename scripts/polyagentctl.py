@@ -1617,10 +1617,11 @@ def _mermaid_ink_img(code: str) -> str:
 
 
 def _replace_mermaid_blocks(markdown: str) -> str:
+    counter = [0]
+
     def repl(m: re.Match[str]) -> str:
         code = m.group(1).strip()
         svg = _render_flowchart(code) or _render_er(code) or _render_sequence(code)
-        token = f"MERMAID_BLOCK_{counter[0]}_PLACEHOLDER"
         counter[0] += 1
         if svg:
             return f'\n<div class="diagram">{svg}</div>\n'
@@ -1636,7 +1637,7 @@ def _render_to_html(source: str) -> str:
     try:
         from markdown_it import MarkdownIt
         md = MarkdownIt("default", {"html": True, "typographer": True})
-        body = md.render(patched)
+        body = md.render(source)
     except ImportError:
         # Keep embedded HTML (diagrams/images) visible even without markdown-it.
         body = source
