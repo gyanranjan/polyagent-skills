@@ -18,14 +18,14 @@ Apply these guidelines when:
 
 ## Default Workflow (Mandatory)
 
-Use `md-to-pdf` (or its alias `polyagentctl export-pdf`) as the canonical/default path for all Mermaid-to-PDF export.
+Use `md-to-pdf` as the canonical/default path for all Mermaid-to-PDF export.
 Do not create ad-hoc per-project converters unless explicitly requested.
 
-Both tools share identical rendering logic and auto-select the best available approach:
+The tool auto-selects the best available approach:
 
-1. **Inline SVG (no tools needed):** `flowchart`, `erDiagram`, `sequenceDiagram` rendered to SVG in pure Python
-2. **Static Mermaid image fallback:** all other diagram types are converted to `https://mermaid.ink/img/...` URLs using URL-safe Base64 encoding (no browser-side JS timing dependency)
-3. **PDF via wkhtmltopdf or headless Chromium** — when available
+1. **Markdown render:** uses `markdown-it`
+2. **Mermaid handling:** converts Mermaid code blocks to static `https://mermaid.ink/img/...` image URLs
+3. **PDF backend fallback order:** Puppeteer (if installed) -> Chromium/Chrome CLI -> wkhtmltopdf
 4. **Fallback:** HTML artifact for manual browser print-to-PDF
 
 `md-to-pdf` is a standalone script installed alongside `polyagentctl` in `~/.local/bin/`.
@@ -57,25 +57,12 @@ polyagentctl doctor
 
 ## Strategy Details
 
-`polyagentctl export-pdf` uses:
+`md-to-pdf` uses a deterministic static-image export path by default:
 
-### Path A: Pre-Render Then Convert (Best Quality)
-
-When `mmdc` (Mermaid CLI) is installed:
-
-1. **Pre-render** each Mermaid codeblock to a high-resolution PNG via `mmdc`
-2. **Replace** the Mermaid codeblock in Markdown with an image reference
-3. **Convert** the image-embedded Markdown to PDF via pandoc or wkhtmltopdf
-
-### Path B: Static Mermaid Image Fallback (No mmdc Needed)
-
-When `mmdc` is NOT installed (or for unsupported inline-render diagram types):
-
-1. **Convert** Mermaid blocks to static image URLs (`https://mermaid.ink/img/...`) in export HTML
-2. **Avoid** browser-side Mermaid JS execution race conditions during print-to-PDF
-3. **Convert** to PDF via wkhtmltopdf or headless browser, or open HTML and print manually
-
-This path is deterministic and does not rely on async Mermaid JS finishing before PDF capture.
+1. Convert Markdown to HTML with `markdown-it`
+2. Replace Mermaid code blocks with static image URLs (`https://mermaid.ink/img/...`)
+3. Try PDF backends in order: Puppeteer -> Chromium/Chrome CLI -> wkhtmltopdf
+4. If no backend succeeds, emit HTML and print manually
 
 ### Fallback: HTML File
 
@@ -114,11 +101,9 @@ When writing Mermaid diagrams that will be exported to PDF, follow these rules:
 
 ## Conversion Process
 
-### Option A: `md-to-pdf` or `polyagentctl export-pdf` — Required Default
+### Option A: `md-to-pdf` — Required Default
 
-Both commands are equivalent. Prefer `md-to-pdf` when calling from skill steps or scripts
-(shorter, no subcommand needed). Use `polyagentctl export-pdf` when already chaining other
-polyagentctl commands in the same shell session.
+Use `md-to-pdf` as the canonical command in skills, scripts, and manual workflows.
 
 ```bash
 # Standalone tool (installed to ~/.local/bin by polyagentctl self-install)
@@ -126,16 +111,12 @@ md-to-pdf input.md                    # → input.pdf (or input.html as fallback
 md-to-pdf input.md --html             # → input.html (force HTML)
 md-to-pdf input.md output.pdf         # explicit output path
 
-# Equivalent polyagentctl subcommand
-polyagentctl export-pdf input.md              # → input.pdf (or input.html as fallback)
-polyagentctl export-pdf input.md --html       # → input.html
-polyagentctl export-pdf input.md output.pdf
-
 # The tool auto-detects:
-# - flowchart/erDiagram/sequenceDiagram → inline SVG (no external tools)
-# - other mermaid types                → static mermaid.ink image fallback
-# - wkhtmltopdf or Chromium available? → PDF
-# - Nothing available?                 → HTML fallback
+# - Mermaid code blocks              → static mermaid.ink image fallback
+# - Puppeteer available?              → PDF (preferred)
+# - Chromium/Chrome available?        → PDF
+# - wkhtmltopdf available?            → PDF
+# - Nothing available?                → HTML fallback
 ```
 
 Install both tools to PATH:
@@ -145,7 +126,7 @@ polyagentctl self-install   # installs polyagentctl + md-to-pdf to ~/.local/bin/
 
 ### Sandbox/Permission Guidance
 
-If headless browser conversion fails in a sandboxed environment (common with Snap Chromium), keep the same command and ensure Chromium is invoked with sandbox-safe flags (`--no-sandbox --disable-gpu --allow-file-access-from-files`) as done by `polyagentctl export-pdf`.
+If headless browser conversion fails in a sandboxed environment (common with Snap Chromium), keep the same command and ensure Chromium is invoked with sandbox-safe flags (`--no-sandbox --disable-gpu --allow-file-access-from-files`) as done by `md-to-pdf`.
 
 If automation remains blocked:
 1. Generate HTML via `--html`
@@ -227,7 +208,6 @@ When no PDF engine is available:
 
 ```bash
 md-to-pdf input.md --html
-# or: polyagentctl export-pdf input.md --html
 
 # Then either:
 # 1. Open output.html in a browser → diagrams render automatically
@@ -272,7 +252,7 @@ Save as `mermaid-pdf-config.json` and use: `mmdc -i input.mmd -o output.svg -c m
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| Diagram appears as raw code in PDF | Export path bypassed `polyagentctl` or markdown parser escaped HTML | Use `polyagentctl export-pdf` so Mermaid blocks are converted before PDF generation |
+| Diagram appears as raw code in PDF | Export path bypassed `md-to-pdf` or markdown parser escaped HTML | Use `md-to-pdf` so Mermaid blocks are converted before PDF generation |
 | Diagram is blurry in PDF | PNG at low resolution | Use SVG instead, or PNG with `-s 2` or higher |
 | Diagram labels are clipped/overlapping | Labels too long or too many nodes | Shorten labels to < 40 chars, split diagram |
 | mmdc hangs or crashes | Chromium sandbox issue in container/CI | Use `mmdc --puppeteerConfigFile` with `{"args": ["--no-sandbox"]}` |

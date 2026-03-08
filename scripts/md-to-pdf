@@ -1,109 +1,371 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
-const MarkdownIt = require('markdown-it');
-const { execSync, spawnSync } = require('child_process');
+'use strict';
 
-function decodeEntities(text) {
-    const entities = {
-        '&lt;': '<',
-        '&gt;': '>',
-        '&amp;': '&',
-        '&quot;': '"',
-        '&apos;': "'"
-    };
-    return text.replace(/&lt;|&gt;|&amp;|&quot;|&apos;/g, (match) => entities[match]);
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+function usage() {
+  console.log(`md-to-pdf - standalone Markdown+Mermaid export tool
+
+Usage:
+  md-to-pdf <input.md> [output.pdf|output.html]
+  md-to-pdf <input.md> --html [output.html]
+  md-to-pdf doctor [--json]
+  md-to-pdf install-deps [--dry-run] [--yes]
+
+Behavior:
+  1) Markdown to HTML via markdown-it
+  2) Mermaid fences -> static mermaid.ink images (deterministic)
+  3) PDF backend fallback order:
+     - Puppeteer (if installed)
+     - Chromium/Chrome CLI
+     - wkhtmltopdf
+  4) If all PDF backends fail: writes HTML fallback
+`);
 }
 
-async function main() {
-    const args = process.argv.slice(2);
-    if (args.length < 1) {
-        console.log("Usage: expert-md-to-pdf <input.md> [output.pdf]");
-        process.exit(1);
+function run(cmd, args, opts = {}) {
+  return spawnSync(cmd, args, { encoding: 'utf8', ...opts });
+}
+
+function findFirstBinary(candidates) {
+  for (const c of candidates) {
+    const r = run('which', [c]);
+    if (r.status === 0) {
+      const p = (r.stdout || '').trim();
+      if (p) return p;
     }
+  }
+  return null;
+}
 
-    const inputPath = path.resolve(args[0]);
-    const outputPath = args[1] ? path.resolve(args[1]) : inputPath.replace(/\.md$/, '.pdf');
-    const htmlPath = inputPath.replace(/\.md$/, '.tmp.html');
+function hasModule(mod) {
+  try {
+    require.resolve(mod);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
-    if (!fs.existsSync(inputPath)) {
-        console.error(`Error: File not found: ${inputPath}`);
-        process.exit(1);
-    }
+function decodeEntities(text) {
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
 
-    const mdContent = fs.readFileSync(inputPath, 'utf8');
-    const md = new MarkdownIt({ html: true });
-    let body = md.render(mdContent);
+function encodeMermaidForInk(diagram) {
+  const b64 = Buffer.from(diagram, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+  return `https://mermaid.ink/img/${encodeURIComponent(b64)}`;
+}
 
-    // Convert Mermaid blocks to divs and decode entities so Mermaid can parse correctly
-    body = body.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g, (match, code) => {
-        const decodedCode = decodeEntities(code.trim());
-        return `<div class="mermaid">${decodedCode}</div>`;
-    });
+function replaceMermaidBlocks(html) {
+  return html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g, (_m, code) => {
+    const decoded = decodeEntities(code.trim());
+    const src = encodeMermaidForInk(decoded);
+    return `<div class="diagram diagram-image"><img src="${src}" alt="Mermaid diagram" loading="eager"/></div>`;
+  });
+}
 
-    const html = `
-<!doctype html>
+function renderHtml(mdContent) {
+  let MarkdownIt;
+  try {
+    MarkdownIt = require('markdown-it');
+  } catch (err) {
+    throw new Error('Missing Node dependency: markdown-it. Run: npm install -g markdown-it');
+  }
+
+  const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
+  let body = md.render(mdContent);
+  body = replaceMermaidBlocks(body);
+
+  return `<!doctype html>
 <html>
 <head>
-    <meta charset='utf-8'/>
-    <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; color: #111; line-height: 1.6; }
-        h1,h2,h3 { margin-top: 1.5em; margin-bottom: 0.5em; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 5px; page-break-after: avoid; }
-        code { background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 4px; font-family: monospace; }
-        pre { background: #f6f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; font-size: 14px; overflow-x: auto; }
-        table { border-collapse: collapse; width: 100%; margin: 20px 0; font-size: 14px; page-break-inside: auto; }
-        tr { page-break-inside: avoid; page-break-after: auto; }
-        th,td { border: 1px solid #d0d7de; padding: 10px; text-align: left; vertical-align: top; }
-        th { background: #f6f8fa; }
-        .mermaid { text-align: center; margin: 30px 0; background: white; border: 1px solid #eee; padding: 10px; border-radius: 8px; }
-        @media print {
-            .mermaid { page-break-inside: avoid; }
-        }
-    </style>
-    <script type="module">
-        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-        mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
-    </script>
+  <meta charset="utf-8"/>
+  <title>Document Export</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 28px; color: #111; line-height: 1.5; }
+    h1,h2,h3 { margin-top: 1.2em; margin-bottom: .5em; }
+    h1 { border-bottom: 1px solid #ddd; padding-bottom: .25em; }
+    code { background: #f6f8fa; padding: .1em .3em; border-radius: 4px; }
+    pre { background: #f6f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; font-size: 12px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 12px; }
+    th,td { border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f6f8fa; }
+    blockquote { border-left: 4px solid #d0d7de; margin: 0; padding-left: 12px; color: #57606a; }
+    .diagram { margin: 12px 0 20px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+    .diagram img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  </style>
 </head>
 <body>${body}</body>
 </html>`;
+}
 
-    fs.writeFileSync(htmlPath, html);
+function writeTempHtml(htmlContent) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'md-to-pdf-'));
+  const htmlPath = path.join(dir, 'source.html');
+  fs.writeFileSync(htmlPath, htmlContent, 'utf8');
+  return { dir, htmlPath };
+}
 
-    try {
-        let chromiumPath;
-        try {
-            chromiumPath = execSync('which chromium || which chromium-browser || which google-chrome').toString().trim();
-        } catch (e) {
-            console.error("No Chromium binary found.");
-            process.exit(1);
-        }
+function chromiumArgs(outputPath, fileUrl) {
+  return [
+    '--headless',
+    '--disable-gpu',
+    '--no-sandbox',
+    '--allow-file-access-from-files',
+    '--virtual-time-budget=10000',
+    '--run-all-compositor-stages-before-draw',
+    `--print-to-pdf=${outputPath}`,
+    fileUrl,
+  ];
+}
 
-        const chromiumArgs = [
-            '--headless',
-            '--disable-gpu',
-            '--no-sandbox',
-            '--allow-file-access-from-files',
-            '--virtual-time-budget=10000',
-            '--run-all-compositor-stages-before-draw',
-            `--print-to-pdf=${outputPath}`,
-            `file://${htmlPath}`
-        ];
+function resolvePuppeteerModule() {
+  if (hasModule('puppeteer')) return 'puppeteer';
+  if (hasModule('puppeteer-core')) return 'puppeteer-core';
+  return null;
+}
 
-        const result = spawnSync(chromiumPath, chromiumArgs, { stdio: 'inherit' });
-        
-        if (result.status === 0) {
-            console.log(`Successfully generated PDF: ${outputPath}`);
-        } else {
-            console.error(`Chromium exited with status ${result.status}`);
-        }
-    } catch (err) {
-        console.error("Error generating PDF:", err.message);
-        process.exit(1);
-    } finally {
-        if (fs.existsSync(htmlPath)) fs.unlinkSync(htmlPath);
+function tryPuppeteer(htmlPath, outputPath) {
+  const mod = resolvePuppeteerModule();
+  if (!mod) return { ok: false, reason: 'puppeteer_not_installed' };
+
+  const exe = process.env.PUPPETEER_EXECUTABLE_PATH || findFirstBinary(['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable']);
+  if (!exe) return { ok: false, reason: 'chromium_not_found' };
+
+  const js = `
+    (async () => {
+      const puppeteer = require(${JSON.stringify(mod)});
+      const browser = await puppeteer.launch({
+        executablePath: ${JSON.stringify(exe)},
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-gpu', '--allow-file-access-from-files']
+      });
+      const page = await browser.newPage();
+      await page.goto(${JSON.stringify('file://' + path.resolve(htmlPath))}, { waitUntil: 'networkidle0' });
+      await page.pdf({ path: ${JSON.stringify(path.resolve(outputPath))}, printBackground: true, format: 'A4', margin: { top: '16mm', right: '12mm', bottom: '16mm', left: '12mm' } });
+      await browser.close();
+    })().catch((e) => { console.error(String(e && e.message || e)); process.exit(2); });
+  `;
+  const r = run('node', ['-e', js]);
+  if (r.status === 0) return { ok: true };
+  return { ok: false, reason: (r.stderr || r.stdout || '').trim() || 'puppeteer_failed' };
+}
+
+function tryChromiumCli(htmlPath, outputPath) {
+  const chrome = findFirstBinary(['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable']);
+  if (!chrome) return { ok: false, reason: 'chromium_not_found' };
+  const url = `file://${path.resolve(htmlPath)}`;
+  const r = run(chrome, chromiumArgs(path.resolve(outputPath), url));
+  if (r.status === 0) return { ok: true };
+  return { ok: false, reason: (r.stderr || r.stdout || '').trim() || 'chromium_failed' };
+}
+
+function tryWkhtmltopdf(htmlPath, outputPath) {
+  const wk = findFirstBinary(['wkhtmltopdf']);
+  if (!wk) return { ok: false, reason: 'wkhtmltopdf_not_found' };
+  const r = run(wk, ['--quiet', path.resolve(htmlPath), path.resolve(outputPath)]);
+  if (r.status === 0) return { ok: true };
+  return { ok: false, reason: (r.stderr || r.stdout || '').trim() || 'wkhtmltopdf_failed' };
+}
+
+function chromiumMissingLibs(chromePath) {
+  if (!chromePath) return [];
+  const r = run('ldd', [chromePath]);
+  if (r.status !== 0) return [];
+  const out = r.stdout || '';
+  const missing = [];
+  for (const ln of out.split('\n')) {
+    if (ln.includes('not found')) {
+      const m = ln.trim().match(/^([^\s]+)/);
+      if (m) missing.push(m[1]);
     }
+  }
+  return missing;
+}
+
+function doctor(jsonOut) {
+  const nodeVersion = process.version;
+  const markdownIt = hasModule('markdown-it');
+  const puppeteer = hasModule('puppeteer') || hasModule('puppeteer-core');
+  const chromePath = findFirstBinary(['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable']);
+  const wkhtmltopdf = findFirstBinary(['wkhtmltopdf']);
+  const missingLibs = chromiumMissingLibs(chromePath);
+
+  const payload = {
+    node: nodeVersion,
+    markdown_it: markdownIt,
+    puppeteer,
+    chromium: chromePath || null,
+    wkhtmltopdf: wkhtmltopdf || null,
+    chromium_missing_libs: missingLibs,
+  };
+
+  if (jsonOut) {
+    console.log(JSON.stringify(payload, null, 2));
+    return 0;
+  }
+
+  console.log('=== md-to-pdf doctor ===');
+  console.log(`node: ${nodeVersion}`);
+  console.log(`markdown-it: ${markdownIt ? 'yes' : 'no (npm i -g markdown-it)'}`);
+  console.log(`puppeteer/puppeteer-core: ${puppeteer ? 'yes' : 'no (optional)'}`);
+  console.log(`chromium: ${chromePath || 'not found'}`);
+  console.log(`wkhtmltopdf: ${wkhtmltopdf || 'not found'}`);
+
+  if (missingLibs.length) {
+    console.log('chromium shared libs missing:');
+    for (const lib of missingLibs) console.log(`  - ${lib}`);
+    console.log('suggested (Debian/Ubuntu): sudo apt-get update && sudo apt-get install -y libnspr4 libnss3 libatk-bridge2.0-0 libxss1 libasound2 libgbm1 libgtk-3-0');
+  }
+
+  if (!markdownIt) {
+    console.log('result: FAIL (required dependency missing: markdown-it)');
+    return 1;
+  }
+
+  if (!chromePath && !wkhtmltopdf && !puppeteer) {
+    console.log('result: WARN (no PDF backend found, HTML fallback only)');
+    return 0;
+  }
+
+  if (missingLibs.length) {
+    console.log('result: WARN (Chromium installed but missing OS libraries)');
+    return 0;
+  }
+
+  console.log('result: OK');
+  return 0;
+}
+
+function installDeps(opts) {
+  const dryRun = opts.has('--dry-run');
+  const yes = opts.has('--yes');
+  const apt = findFirstBinary(['apt-get']);
+
+  if (!apt) {
+    console.error('install-deps currently supports apt-get based systems only.');
+    console.error('Install manually: markdown-it (npm), and Chromium libs (libnspr4/libnss3/...).');
+    return 1;
+  }
+
+  const cmds = [
+    ['npm', ['install', '-g', 'markdown-it']],
+    ['sudo', ['apt-get', 'update']],
+    ['sudo', ['apt-get', 'install', '-y', 'libnspr4', 'libnss3', 'libatk-bridge2.0-0', 'libxss1', 'libasound2', 'libgbm1', 'libgtk-3-0']],
+  ];
+
+  console.log('Planned install commands:');
+  for (const [c, a] of cmds) console.log(`  ${[c, ...a].join(' ')}`);
+
+  if (dryRun) return 0;
+  if (!yes) {
+    console.error('Pass --yes to execute install commands.');
+    return 1;
+  }
+
+  for (const [c, a] of cmds) {
+    const r = run(c, a, { stdio: 'inherit' });
+    if (r.status !== 0) {
+      console.error(`Command failed: ${[c, ...a].join(' ')}`);
+      return r.status || 1;
+    }
+  }
+
+  return 0;
+}
+
+function convert(args) {
+  if (args.length < 1) {
+    usage();
+    return 1;
+  }
+
+  const forceHtml = args.includes('--html');
+  const cleaned = args.filter((a) => a !== '--html');
+  const inputPath = path.resolve(cleaned[0]);
+  const explicitOutput = cleaned[1] ? path.resolve(cleaned[1]) : null;
+
+  if (!fs.existsSync(inputPath)) {
+    console.error(`Error: input file not found: ${inputPath}`);
+    return 1;
+  }
+
+  const outputPath = explicitOutput || inputPath.replace(/\.md$/i, forceHtml ? '.html' : '.pdf');
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  const mdContent = fs.readFileSync(inputPath, 'utf8');
+  let html;
+  try {
+    html = renderHtml(mdContent);
+  } catch (err) {
+    console.error(String(err.message || err));
+    return 1;
+  }
+
+  if (forceHtml || outputPath.toLowerCase().endsWith('.html')) {
+    fs.writeFileSync(outputPath, html, 'utf8');
+    console.log(`HTML written: ${outputPath}`);
+    return 0;
+  }
+
+  const { dir, htmlPath } = writeTempHtml(html);
+  const errors = [];
+
+  try {
+    const backends = [
+      { name: 'puppeteer', fn: () => tryPuppeteer(htmlPath, outputPath) },
+      { name: 'chromium', fn: () => tryChromiumCli(htmlPath, outputPath) },
+      { name: 'wkhtmltopdf', fn: () => tryWkhtmltopdf(htmlPath, outputPath) },
+    ];
+
+    for (const b of backends) {
+      const r = b.fn();
+      if (r.ok) {
+        console.log(`PDF written: ${outputPath} (backend=${b.name})`);
+        return 0;
+      }
+      errors.push(`${b.name}: ${r.reason}`);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  const htmlFallback = outputPath.replace(/\.pdf$/i, '.html');
+  fs.writeFileSync(htmlFallback, html, 'utf8');
+  console.error('No PDF backend succeeded. HTML fallback written: ' + htmlFallback);
+  for (const e of errors) console.error('  - ' + e);
+  return 0;
+}
+
+function main() {
+  const argv = process.argv.slice(2);
+  if (argv.length === 0 || argv[0] === '-h' || argv[0] === '--help') {
+    usage();
+    process.exit(0);
+  }
+
+  const cmd = argv[0];
+  if (cmd === 'doctor') {
+    process.exit(doctor(argv.includes('--json')));
+  }
+  if (cmd === 'install-deps') {
+    process.exit(installDeps(new Set(argv.slice(1))));
+  }
+  process.exit(convert(argv));
 }
 
 main();

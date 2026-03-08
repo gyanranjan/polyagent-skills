@@ -368,8 +368,8 @@ When you receive a task:
 polyagentctl doctor
 
 # Convert Markdown (with Mermaid diagrams) to PDF or HTML
-polyagentctl export-pdf <file.md>          # auto-detect output format
-polyagentctl export-pdf <file.md> --html   # force HTML
+md-to-pdf <file.md>                    # auto-detect output format
+md-to-pdf <file.md> --html             # force HTML
 
 # Gate and design checks
 polyagentctl gate-check [agent.todo.md]
@@ -419,7 +419,7 @@ When you receive a task:
 
 ```bash
 polyagentctl doctor                        # check/install prerequisites
-polyagentctl export-pdf <file.md>          # Markdown+Mermaid → PDF/HTML
+md-to-pdf <file.md>                    # Markdown+Mermaid → PDF/HTML
 polyagentctl gate-check [agent.todo.md]    # verify lifecycle gate status
 polyagentctl check --strict --project .   # pre-PR quality gate
 ```
@@ -472,7 +472,7 @@ Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Sk
 
 ```bash
 polyagentctl doctor                        # check/install prerequisites
-polyagentctl export-pdf <file.md>          # Markdown+Mermaid → PDF/HTML
+md-to-pdf <file.md>                    # Markdown+Mermaid → PDF/HTML
 polyagentctl gate-check [agent.todo.md]
 polyagentctl check --strict --project .   # pre-PR quality gate
 ```
@@ -525,7 +525,7 @@ Check `agent.todo.md` for gate status. Start at the earliest incomplete gate. Sk
 
 ```bash
 polyagentctl doctor                        # check/install prerequisites
-polyagentctl export-pdf <file.md>          # Markdown+Mermaid → PDF/HTML
+md-to-pdf <file.md>                    # Markdown+Mermaid → PDF/HTML
 polyagentctl gate-check [agent.todo.md]
 polyagentctl check --strict --project .   # pre-PR quality gate
 ```
@@ -1451,7 +1451,7 @@ def verify_context_pack_cmd(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
-# export-pdf command
+# markdown/html rendering helpers (kept for compatibility tests)
 # ---------------------------------------------------------------------------
 
 def _esc(s: str) -> str:
@@ -1671,62 +1671,6 @@ def _write_temp_html(html_content: str) -> tuple[Path, Path]:
     return tmp_dir, tmp_html
 
 
-def export_pdf_cmd(args: argparse.Namespace) -> int:
-    input_md = Path(args.input_md)
-    if not input_md.exists():
-        print(f"Error: File not found: {input_md}", file=sys.stderr)
-        return 1
-
-    force_html = args.html
-    if args.output:
-        output = Path(args.output)
-    else:
-        output = input_md.with_suffix(".html" if force_html else ".pdf")
-
-    output.parent.mkdir(parents=True, exist_ok=True)
-    source = input_md.read_text(encoding="utf-8")
-    html_content = _render_to_html(source)
-
-    if force_html:
-        output.write_text(html_content, encoding="utf-8")
-        print(f"HTML written: {output}")
-        return 0
-
-    tmp_dir, tmp_html = _write_temp_html(html_content)
-    tmp_url = tmp_html.resolve().as_uri()
-    try:
-        # Try PDF via wkhtmltopdf
-        if which("wkhtmltopdf"):
-            rc = run(["wkhtmltopdf", "--quiet", str(tmp_html.resolve()), str(output)])
-            if rc == 0:
-                print(f"PDF written: {output}")
-                return 0
-
-        # Try PDF via headless Chromium
-        for browser in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable"):
-            if which(browser):
-                rc = run([
-                    browser,
-                    "--headless",
-                    "--disable-gpu",
-                    "--no-sandbox",
-                    "--allow-file-access-from-files",
-                    f"--print-to-pdf={output}",
-                    tmp_url,
-                ])
-                if rc == 0:
-                    print(f"PDF written: {output}")
-                    return 0
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-    # Fallback: write HTML
-    html_out = output.with_suffix(".html")
-    html_out.write_text(html_content, encoding="utf-8")
-    print(f"No PDF tool found (wkhtmltopdf/chromium). HTML written: {html_out}")
-    return 0
-
-
 # ---------------------------------------------------------------------------
 # self-install command
 # ---------------------------------------------------------------------------
@@ -1835,13 +1779,6 @@ def build_parser() -> argparse.ArgumentParser:
     vc = sub.add_parser("verify-context-pack", help="validate context pack structure")
     vc.add_argument("pack")
     vc.set_defaults(func=verify_context_pack_cmd)
-
-    # export-pdf
-    pdf = sub.add_parser("export-pdf", help="convert markdown to PDF or HTML")
-    pdf.add_argument("input_md")
-    pdf.add_argument("output", nargs="?")
-    pdf.add_argument("--html", action="store_true", help="force HTML output")
-    pdf.set_defaults(func=export_pdf_cmd)
 
     # doctor
     dr = sub.add_parser("doctor", help="check prerequisites and optionally install missing tools")

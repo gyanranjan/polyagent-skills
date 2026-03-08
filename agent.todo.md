@@ -4,16 +4,16 @@ Canonical cross-session task ledger for all agents working in this repository.
 
 ## Metadata
 
-- Last Updated: 2026-03-03
+- Last Updated: 2026-03-08
 - Canonical Source: this file
 - Coordination Rule: single writer per artifact
 
 ## Workflow Snapshot
 
-- Current Phase: requirement-study
-- Next Phase: implementation-sketch
-- Current Gate: G1 Requirements
-- Next Step: Finalize open requirements decisions, then advance to G2
+- Current Phase: implementation-sketch
+- Next Phase: engineering-team
+- Current Gate: G4 Implementation
+- Next Step: Run strict check, then prepare commit + PR notes for md-to-pdf migration
 - Repository: https://github.com/gyanranjan/polyagent-skills
 - Default Branch Strategy: trunk (main)
 - **Lifecycle Process:** `common-skills/development-lifecycle-gates.md`
@@ -23,11 +23,11 @@ Canonical cross-session task ledger for all agents working in this repository.
 | Gate | Name | Status | Evidence | Skip Reason |
 |------|------|--------|----------|-------------|
 | G0 | Discovery | Passed | `common-skills/development-lifecycle-gates.md` | — |
-| G1 | Requirements | In Progress | `common-skills/development-lifecycle-gates.md` | — |
-| G2 | Design | Not Started | — | — |
+| G1 | Requirements | Passed | `README.md`, `common-skills/mermaid-to-pdf.md` updated for standalone `md-to-pdf` workflow | — |
+| G2 | Design | Passed | `scripts/md-to-pdf` standalone CLI design finalized (`doctor`, `install-deps`, backend fallbacks) | — |
 | G3 | POC / Spike | Not Started | — | — |
-| G4 | Implementation | Not Started | — | — |
-| G5 | Review | Not Started | — | — |
+| G4 | Implementation | In Progress | `scripts/md-to-pdf`, `package.json`, `scripts/polyagentctl.py`, `tests/test_polyagentctl.py` | — |
+| G5 | Review | In Progress | Focused unit tests + strict check run in progress | — |
 | G6 | Ship & Learn | Not Started | — | — |
 
 Gate rules: See `common-skills/development-lifecycle-gates.md`. Gates are mandatory by default — skip requires explicit user request.
@@ -45,11 +45,11 @@ Lock policy:
 
 ## Now
 
-- [ ] TASK-101 | Owner: codex | Artifact: scripts/md-to-pdf.sh | Status: in_progress | DependsOn: -
+- [ ] TASK-103 | Owner: codex | Artifact: md-to-pdf standalone npm packaging + docs alignment | Status: in_progress | DependsOn: -
 
 ## Next
 
-- [ ] TASK-102 | Owner: codex | Artifact: adapters/* + docs consistency | Status: todo | DependsOn: TASK-101
+- [ ] TASK-104 | Owner: codex | Artifact: final strict gate + PR packaging | Status: todo | DependsOn: TASK-103
 
 ## Blocked
 
@@ -57,12 +57,14 @@ Lock policy:
 
 ## Decision Needed
 
-- [ ] DEC-101 | Owner: maintainer | Decision: Require pre-PR gate checks in all adapters or Codex-only? | Options: all adapters / codex-only | Due: 2026-03-05
+- [ ] (none)
 
 ## Done
 
 - [x] TASK-099 | Owner: codex | Artifact: scripts/gate-status-check.sh | Completed: 2026-03-03 07:44 UTC
 - [x] TASK-100 | Owner: codex | Artifact: scripts/install-global-all.sh + adapters/codex/AGENTS.md | Completed: 2026-03-03 07:44 UTC
+- [x] TASK-101 | Owner: codex | Artifact: remove `polyagentctl export-pdf`; promote standalone `md-to-pdf` | Completed: 2026-03-08 14:20 UTC
+- [x] TASK-102 | Owner: codex | Artifact: add `package.json` for npm-style standalone install | Completed: 2026-03-08 14:20 UTC
 
 ## Handoffs
 
