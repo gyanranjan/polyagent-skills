@@ -365,5 +365,59 @@ class PolyagentCtlTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+    def test_render_flowchart_basic(self):
+        svg = self.mod._render_flowchart("""flowchart TD
+A[Start] --> B[End]
+""")
+        self.assertIsNotNone(svg)
+        self.assertIn("<svg", svg)
+        self.assertIn("Start", svg)
+        self.assertIn("End", svg)
+
+    def test_render_er_basic(self):
+        svg = self.mod._render_er("""erDiagram
+USER ||--o{ ORDER : places
+""")
+        self.assertIsNotNone(svg)
+        self.assertIn("<svg", svg)
+        self.assertIn("USER", svg)
+        self.assertIn("ORDER", svg)
+
+    def test_render_sequence_basic(self):
+        svg = self.mod._render_sequence("""sequenceDiagram
+participant Alice
+participant Bob
+Alice->>Bob: Hello
+""")
+        self.assertIsNotNone(svg)
+        self.assertIn("<svg", svg)
+        self.assertIn("Alice", svg)
+        self.assertIn("Bob", svg)
+
+    def test_replace_mermaid_blocks_uses_svg_or_image(self):
+        md = (
+            "```mermaid\n"
+            "flowchart TD\nA[Start] --> B[End]\n"
+            "```\n\n"
+            "```mermaid\n"
+            "pie title Pets\n\"Dogs\" : 42\n"
+            "```\n"
+        )
+        out = self.mod._replace_mermaid_blocks(md)
+        self.assertIn("<svg", out)
+        self.assertIn("https://mermaid.ink/img/", out)
+
+    def test_render_to_html_includes_mermaid_outputs(self):
+        html = self.mod._render_to_html(
+            "# Doc\n\n"
+            "```mermaid\n"
+            "flowchart TD\nA[Start] --> B[End]\n"
+            "```\n"
+        )
+        self.assertIn("<html>", html)
+        self.assertIn("<body>", html)
+        self.assertIn("<svg", html)
+
+
 if __name__ == "__main__":
     unittest.main()
