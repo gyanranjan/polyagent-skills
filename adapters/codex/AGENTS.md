@@ -66,10 +66,12 @@ Gates are mandatory by default. Check `agent.todo.md` for gate status. Start at 
 - `skills/systems-architect/` — Scalable system design, architecture decisions, and trade-off analysis
 - `skills/systems-simplifier/` — Identify and eliminate unnecessary complexity and over-engineering
 - `skills/visionary-futurist/` — Long-horizon technology trajectories and second-order consequences
+- `skills/quantitative-sanity-checker/` — Back-of-the-envelope arithmetic to sanity-check claims and forecasts
 
 ## Common Skills
 
 - `common-skills/development-lifecycle-gates.md` — Gated development process
+- `common-skills/pre-delivery-review-panel.md` — Automatic expert + devil's advocate + quantitative review before gate transitions
 - `common-skills/design-readiness-gate.md` — Pre-coding architecture checklist
 - `common-skills/agent-todo-ledger.md` — Cross-session task tracking
 - `common-skills/document-tail-sections.md` — Standard document endings
