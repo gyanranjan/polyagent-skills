@@ -100,14 +100,14 @@ Tracking known limitations, agent quirks, and workarounds.
 
 **Problem:** Standard Markdown-to-PDF converters (pandoc, markdown-pdf, etc.) do not natively render Mermaid codeblocks. This causes diagrams to either appear as raw code text in the PDF, be silently dropped, or render as low-resolution blurry images.
 
-**Solution:** `polyagentctl export-pdf` auto-selects the best available render path:
+**Solution:** `md-to-pdf` auto-selects the best available render path:
 
-- **Inline SVG (no tools needed):** `flowchart`, `erDiagram`, `sequenceDiagram` blocks rendered to SVG in pure Python.
-- **Mermaid.js CDN:** all other types wrapped in a `<div class="mermaid">` block rendered by the browser.
-- **PDF:** via wkhtmltopdf or headless Chromium when available.
-- **Fallback:** HTML with live Mermaid viewable in any browser. Use `--html` to force this path. Print to PDF via Ctrl+P.
+- **Markdown render:** via `markdown-it`.
+- **Mermaid:** code blocks converted to static `mermaid.ink` image URLs for deterministic exports.
+- **PDF:** tries Puppeteer, then Chromium/Chrome CLI, then wkhtmltopdf.
+- **Fallback:** HTML output when no PDF backend succeeds. Use `--html` to force this path.
 
-**Requirements:** None for inline SVG diagrams (flowchart/erDiagram/sequenceDiagram). For PDF: `wkhtmltopdf` or Chromium. For other diagram types: any modern browser (Mermaid.js CDN). Check with `polyagentctl doctor`.
+**Requirements:** `markdown-it` is required. For PDF output use at least one backend: Puppeteer, Chromium/Chrome, or `wkhtmltopdf`. Check with `md-to-pdf doctor`.
 
 **Tracking:** See `common-skills/mermaid-to-pdf.md` for full docs.
 

@@ -315,7 +315,7 @@ polyagentctl sync-todo agent.todo.md path/to/requirements.md [path/to/spec.md]
 polyagentctl init-issues path/to/requirements.md org/repo
 
 # Convert Markdown with Mermaid diagrams to PDF (falls back to HTML when no PDF tool available)
-polyagentctl export-pdf path/to/document.md
+md-to-pdf path/to/document.md
 
 # Verify context pack structure and traceability
 polyagentctl verify-context-pack context/pack.md

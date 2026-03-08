@@ -58,120 +58,8 @@ class PolyagentCtlTests(unittest.TestCase):
             self.assertIn("strict_results", payload)
             self.assertEqual(len(payload["strict_results"]), 2)
 
-    def test_export_pdf_html(self):
-        with tempfile.TemporaryDirectory() as td:
-            inp = Path(td) / "doc.md"
-            inp.write_text("# Hello\n\nWorld\n", encoding="utf-8")
-            out = Path(td) / "doc.html"
-            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
-            rc = self.mod.export_pdf_cmd(args)
-            self.assertEqual(rc, 0)
-            self.assertTrue(out.exists())
-            self.assertIn("<html", out.read_text(encoding="utf-8"))
-
-    def test_export_pdf_html_mermaid_flowchart(self):
-        """Mermaid flowchart blocks are rendered to inline SVG (no external tools needed)."""
-        with tempfile.TemporaryDirectory() as td:
-            inp = Path(td) / "flow.md"
-            inp.write_text(
-                "# Diagram\n\n"
-                "```mermaid\n"
-                "flowchart TD\n"
-                "A[Start] --> B[End]\n"
-                "```\n",
-                encoding="utf-8",
-            )
-            out = Path(td) / "flow.html"
-            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
-            rc = self.mod.export_pdf_cmd(args)
-            self.assertEqual(rc, 0)
-            content = out.read_text(encoding="utf-8")
-            self.assertIn("<svg", content)
-            self.assertIn("Start", content)
-            self.assertIn("End", content)
-            # Should NOT fall back to raw code block
-            self.assertNotIn("```mermaid", content)
-
-    def test_export_pdf_html_mermaid_sequence(self):
-        """Mermaid sequenceDiagram blocks are rendered to inline SVG (no external tools needed)."""
-        with tempfile.TemporaryDirectory() as td:
-            inp = Path(td) / "seq.md"
-            inp.write_text(
-                "# Sequence\n\n"
-                "```mermaid\n"
-                "sequenceDiagram\n"
-                "    participant Alice\n"
-                "    participant Bob\n"
-                "    Alice->>Bob: Hello!\n"
-                "    Bob-->>Alice: Hi!\n"
-                "```\n",
-                encoding="utf-8",
-            )
-            out = Path(td) / "seq.html"
-            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
-            rc = self.mod.export_pdf_cmd(args)
-            self.assertEqual(rc, 0)
-            content = out.read_text(encoding="utf-8")
-            self.assertIn("<svg", content)
-            self.assertIn("Alice", content)
-            self.assertIn("Bob", content)
-            self.assertNotIn("```mermaid", content)
-
-    def test_export_pdf_html_mermaid_unknown_uses_static_image(self):
-        """Unknown mermaid diagram types fall back to static mermaid.ink image URLs."""
-        with tempfile.TemporaryDirectory() as td:
-            inp = Path(td) / "pie.md"
-            inp.write_text(
-                "# Pie\n\n"
-                "```mermaid\n"
-                'pie title Pets\n'
-                '    "Dogs" : 42\n'
-                '    "Cats" : 58\n'
-                "```\n",
-                encoding="utf-8",
-            )
-            out = Path(td) / "pie.html"
-            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
-            rc = self.mod.export_pdf_cmd(args)
-            self.assertEqual(rc, 0)
-            content = out.read_text(encoding="utf-8")
-            self.assertIn("https://mermaid.ink/img/", content)
-            self.assertIn('class="diagram diagram-image"', content)
-            self.assertNotIn("mermaid.esm.min.mjs", content)
-            self.assertNotIn("```mermaid", content)
 
 
-    def test_export_pdf_chromium_uses_absolute_file_url_and_sandbox_flags(self):
-        with tempfile.TemporaryDirectory() as td:
-            inp = Path(td) / "doc.md"
-            inp.write_text("# Hello\n", encoding="utf-8")
-            out = Path(td) / "doc.pdf"
-            args = SimpleNamespace(html=False, input_md=str(inp), output=str(out))
-
-            called = []
-
-            def fake_run(cmd, cwd=None):
-                called.append(cmd)
-                return 0
-
-            def fake_which(name):
-                if name in {"wkhtmltopdf"}:
-                    return None
-                if name in {"chromium"}:
-                    return "/usr/bin/chromium"
-                return None
-
-            with patch.object(self.mod, "run", side_effect=fake_run):
-                with patch.object(self.mod, "which", side_effect=fake_which):
-                    rc = self.mod.export_pdf_cmd(args)
-
-            self.assertEqual(rc, 0)
-            self.assertTrue(called)
-            cmd = called[0]
-            self.assertIn("--no-sandbox", cmd)
-            self.assertIn("--disable-gpu", cmd)
-            self.assertIn("--allow-file-access-from-files", cmd)
-            self.assertTrue(any(str(part).startswith("file://") for part in cmd))
 
     def test_polyagentctl_is_standalone(self):
         """Script has shebang and __main__ guard — no shell wrapper needed."""
@@ -344,65 +232,8 @@ class PolyagentCtlTests(unittest.TestCase):
             self.assertTrue(md_to_pdf.exists())
             self.assertTrue(os.access(md_to_pdf, os.X_OK))
 
-    def test_export_pdf_html_mermaid_er(self):
-        """erDiagram blocks are rendered to inline SVG."""
-        with tempfile.TemporaryDirectory() as td:
-            inp = Path(td) / "er.md"
-            inp.write_text(
-                "# ER\n\n"
-                "```mermaid\n"
-                "erDiagram\n"
-                "    USER ||--o{ ORDER : places\n"
-                "    ORDER ||--|{ ITEM : contains\n"
-                "```\n",
-                encoding="utf-8",
-            )
-            out = Path(td) / "er.html"
-            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
-            rc = self.mod.export_pdf_cmd(args)
-            self.assertEqual(rc, 0)
-            content = out.read_text(encoding="utf-8")
-            self.assertIn("<svg", content)
-            self.assertIn("USER", content)
-            self.assertNotIn("```mermaid", content)
 
-    def test_export_pdf_html_flowchart_lr(self):
-        """Flowchart LR direction renders horizontal SVG."""
-        with tempfile.TemporaryDirectory() as td:
-            inp = Path(td) / "lr.md"
-            inp.write_text(
-                "# LR Flow\n\n"
-                "```mermaid\n"
-                "flowchart LR\n"
-                "A[Input] --> B[Output]\n"
-                "```\n",
-                encoding="utf-8",
-            )
-            out = Path(td) / "lr.html"
-            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
-            rc = self.mod.export_pdf_cmd(args)
-            self.assertEqual(rc, 0)
-            content = out.read_text(encoding="utf-8")
-            self.assertIn("<svg", content)
-            self.assertIn("Input", content)
 
-    def test_export_pdf_file_not_found(self):
-        """export_pdf_cmd returns 1 when the input file does not exist."""
-        args = SimpleNamespace(html=True, input_md="/nonexistent/path/file.md", output=None)
-        rc = self.mod.export_pdf_cmd(args)
-        self.assertEqual(rc, 1)
-
-    def test_export_pdf_auto_html_fallback(self):
-        """When no PDF tool and no explicit output, falls back to .html output."""
-        with tempfile.TemporaryDirectory() as td:
-            inp = Path(td) / "doc.md"
-            inp.write_text("# Title\n\nSome content.\n", encoding="utf-8")
-            args = SimpleNamespace(html=False, input_md=str(inp), output=None)
-            with patch.object(self.mod, "which", return_value=None):
-                rc = self.mod.export_pdf_cmd(args)
-            self.assertEqual(rc, 0)
-            # Fallback produces .html
-            self.assertTrue((Path(td) / "doc.html").exists())
 
     def test_check_plain_text(self):
         """check_cmd without --json prints human-readable tool status."""
@@ -533,28 +364,59 @@ class PolyagentCtlTests(unittest.TestCase):
         result = self.mod._render_sequence("flowchart TD\nA --> B")
         self.assertIsNone(result)
 
-    def test_export_pdf_html_mermaid_multiple_blocks(self):
-        """Multiple mermaid blocks in one document all render without escaping."""
-        with tempfile.TemporaryDirectory() as td:
-            inp = Path(td) / "multi.md"
-            inp.write_text(
-                "# Multi\n\n"
-                "```mermaid\n"
-                "flowchart TD\nA[Start] --> B[End]\n"
-                "```\n\n"
-                "Middle text.\n\n"
-                "```mermaid\n"
-                "sequenceDiagram\nAlice->>Bob: Hi\n"
-                "```\n",
-                encoding="utf-8",
-            )
-            out = Path(td) / "multi.html"
-            args = SimpleNamespace(html=True, input_md=str(inp), output=str(out))
-            rc = self.mod.export_pdf_cmd(args)
-            self.assertEqual(rc, 0)
-            content = out.read_text(encoding="utf-8")
-            self.assertEqual(content.count("<svg"), 2)
-            self.assertNotIn("&lt;svg", content)
+
+    def test_render_flowchart_basic(self):
+        svg = self.mod._render_flowchart("""flowchart TD
+A[Start] --> B[End]
+""")
+        self.assertIsNotNone(svg)
+        self.assertIn("<svg", svg)
+        self.assertIn("Start", svg)
+        self.assertIn("End", svg)
+
+    def test_render_er_basic(self):
+        svg = self.mod._render_er("""erDiagram
+USER ||--o{ ORDER : places
+""")
+        self.assertIsNotNone(svg)
+        self.assertIn("<svg", svg)
+        self.assertIn("USER", svg)
+        self.assertIn("ORDER", svg)
+
+    def test_render_sequence_basic(self):
+        svg = self.mod._render_sequence("""sequenceDiagram
+participant Alice
+participant Bob
+Alice->>Bob: Hello
+""")
+        self.assertIsNotNone(svg)
+        self.assertIn("<svg", svg)
+        self.assertIn("Alice", svg)
+        self.assertIn("Bob", svg)
+
+    def test_replace_mermaid_blocks_uses_svg_or_image(self):
+        md = (
+            "```mermaid\n"
+            "flowchart TD\nA[Start] --> B[End]\n"
+            "```\n\n"
+            "```mermaid\n"
+            "pie title Pets\n\"Dogs\" : 42\n"
+            "```\n"
+        )
+        out = self.mod._replace_mermaid_blocks(md)
+        self.assertIn("<svg", out)
+        self.assertIn("https://mermaid.ink/img/", out)
+
+    def test_render_to_html_includes_mermaid_outputs(self):
+        html = self.mod._render_to_html(
+            "# Doc\n\n"
+            "```mermaid\n"
+            "flowchart TD\nA[Start] --> B[End]\n"
+            "```\n"
+        )
+        self.assertIn("<html>", html)
+        self.assertIn("<body>", html)
+        self.assertIn("<svg", html)
 
 
 if __name__ == "__main__":
